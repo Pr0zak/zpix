@@ -1,0 +1,16 @@
+# build outputs (contain APKs and on-device screenshots)
+build/
+shots/
+*.apk
+*.dex
+
+# screenshots / previews that may contain personal photos
+*_preview.png
+shots/
+
+# signing key — never commit
+*.keystore
+
+# misc
+.gradle/
+.DS_Store
