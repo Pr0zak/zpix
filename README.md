@@ -1,30 +1,33 @@
 <p align="center">
-  <img src="docs/logo.png" width="150" alt="zpix logo">
+  <img src="docs/logo.png" width="140" alt="zpix">
 </p>
 
 <h1 align="center">zpix</h1>
 
-<p align="center">A lightweight, fully-offline digital <b>photo frame</b> for Android — giving an old tablet a second life.<br>No accounts, no cloud, no nag screens.</p>
+<p align="center">A simple, fully-offline digital <b>photo frame</b> for Android — give an old tablet a second life.</p>
 
 ---
 
-A lightweight, fully-offline digital **photo frame** app for Android — built to give an old tablet a second life. No accounts, no cloud, no nag screens.
+zpix turns an old Android tablet into an always-on photo frame. No accounts, no cloud, no ads, no nag screens — it just shows your photos with nice transitions. It's a tiny native shell hosting a WebView, with the slideshow engine written in plain HTML/CSS/JS.
 
-It's a tiny native shell hosting a WebView; the slideshow engine is plain HTML/CSS/JS, which makes the fancy GPU-accelerated transitions easy.
+## Tested on
+
+- **Samsung Galaxy Tab Pro 12.2 (SM-T900)**, **Android 5.1.1 (API 22)**.
+- Built for **Android 5.1+ (API 22 and up)**.
 
 ## Features
 
-- **Local & offline** — reads photos straight from a folder on the device.
-- **Transitions**: Ken Burns (slow pan/zoom), crossfade, slide, **scattered collage** (photos at their true aspect ratios, framed and tilted), **floating** (photos drift and zoom across the screen), and an **origami fold**.
-- **Settings** (tap the screen): photo folder picker, seconds-per-photo, photos-per-collage, shuffle, clock overlay, and per-transition on/off — persisted in the WebView's localStorage.
-- **Always-on**: keeps the screen awake and auto-starts on boot.
-- Runs on **Android 5.1+** (API 22).
+- **Offline & local** — plays photos straight from folders on the device; no network needed.
+- **Transitions** — Ken Burns, crossfade, slide, scattered collage, floating photos, and an Apple-style **origami grid** (tiles fold to reveal new photos).
+- **Settings** (tap the screen) — photo folder, seconds per photo, photos per collage, photo size, order (random / name / date), image fit, transition speed, clock, and per-transition toggles.
+- **Always-on** — keeps the screen awake and auto-starts on boot.
+- **Self-update** — checks GitHub Releases and installs new versions in place.
 
 ## Screenshots
 
 <table>
   <tr>
-    <td align="center"><img src="docs/shot-origami.png" alt="Origami grid wall"><br><sub>Origami — grid of tiles that fold to new photos</sub></td>
+    <td align="center"><img src="docs/shot-origami.png" alt="Origami grid"><br><sub>Origami grid (tiles fold to new photos)</sub></td>
     <td align="center"><img src="docs/shot-floating.png" alt="Floating photos"><br><sub>Floating photos</sub></td>
   </tr>
   <tr>
@@ -38,35 +41,32 @@ It's a tiny native shell hosting a WebView; the slideshow engine is plain HTML/C
 
 <sub>Screenshots use royalty-free placeholder photos.</sub>
 
-## Build
+## Install
 
-No Gradle required — the app has zero third-party dependencies.
+Download the latest `zpix-vX.Y.Z.apk` from [Releases](https://github.com/Pr0zak/zpix/releases), then:
+
+```bash
+adb install -r zpix-*.apk
+```
+
+Put some photos on the device (e.g. `/sdcard/Pictures`). On first run zpix uses the folder with the most photos; tap the screen to open Settings and pick your folder. On Android 5.1 you must allow **Unknown sources** for the in-app updater to install.
+
+## Build from source
+
+No Gradle — the app has zero third-party dependencies.
 
 ```bash
 ./build.sh        # aapt2 -> javac -> d8 -> zipalign -> apksigner
+python3 gen_icon.py   # regenerate the launcher icon (optional)
 ```
 
-Requires a JDK, the Android SDK (`build-tools` with `aapt2`/`d8`/`apksigner`/`zipalign`, plus a platform `android.jar`). Edit the paths at the top of `build.sh` to match your SDK location. The output is `build/zpix.apk`.
-
-Regenerate the launcher icon (PIL):
-
-```bash
-python3 gen_icon.py
-```
-
-## Install
-
-```bash
-adb install -r build/zpix.apk
-```
-
-Put your photos in a folder on the device (e.g. `/sdcard/Pictures`). On first run zpix auto-selects the folder with the most photos; you can change it anytime by tapping the screen to open settings.
+Needs a JDK and the Android SDK (`build-tools` + a platform `android.jar`); output is `build/zpix.apk`. Tagging `vX.Y.Z` builds a signed APK and publishes a Release via GitHub Actions.
 
 ## Layout
 
 ```
 AndroidManifest.xml
-src/com/zand/frame/   MainActivity.java (WebView shell + folder bridge), BootReceiver.java
+src/com/zand/frame/   MainActivity.java (WebView shell + folder/update bridge), BootReceiver.java
 assets/               index.html, app.js (slideshow engine), style.css, logo.svg
 res/                  strings + launcher icons
 build.sh, gen_icon.py
