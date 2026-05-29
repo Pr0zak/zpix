@@ -24,12 +24,15 @@ It's a tiny native shell hosting a WebView; the slideshow engine is plain HTML/C
 
 <table>
   <tr>
-    <td align="center"><img src="docs/shot-collage.png" alt="Scattered collage"><br><sub>Scattered collage</sub></td>
+    <td align="center"><img src="docs/shot-origami.png" alt="Origami grid wall"><br><sub>Origami — grid of tiles that fold to new photos</sub></td>
     <td align="center"><img src="docs/shot-floating.png" alt="Floating photos"><br><sub>Floating photos</sub></td>
   </tr>
   <tr>
+    <td align="center"><img src="docs/shot-collage.png" alt="Scattered collage"><br><sub>Scattered collage</sub></td>
     <td align="center"><img src="docs/shot-settings.png" alt="Settings"><br><sub>Settings</sub></td>
-    <td align="center"><img src="docs/shot-splash.png" alt="Splash screen"><br><sub>Splash screen</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="docs/shot-splash.png" width="420" alt="Splash screen"><br><sub>Splash screen</sub></td>
   </tr>
 </table>
 
