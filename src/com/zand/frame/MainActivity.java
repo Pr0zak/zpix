@@ -21,9 +21,6 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -183,42 +180,31 @@ public class MainActivity extends Activity {
             return arr.toString();
         }
 
-        // Download an APK from the given URL and launch the system installer.
+        // The WebView (modern TLS) downloads the APK and passes the bytes here as
+        // base64; we write them out and launch the system installer. Done this way
+        // because the device's native TLS stack is too old for GitHub's CDN.
         @JavascriptInterface
-        public void installUpdate(final String url) {
-            new Thread(new Runnable() {
-                public void run() {
-                    try {
-                        File out = new File(Environment.getExternalStoragePublicDirectory(
-                                Environment.DIRECTORY_DOWNLOADS), "zpix-update.apk");
-                        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-                        c.setInstanceFollowRedirects(true);
-                        c.setConnectTimeout(15000);
-                        c.setReadTimeout(30000);
-                        c.connect();
-                        InputStream in = c.getInputStream();
-                        FileOutputStream fo = new FileOutputStream(out);
-                        byte[] buf = new byte[8192];
-                        int n;
-                        while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
-                        fo.flush();
-                        fo.close();
-                        in.close();
-                        c.disconnect();
-                        final Uri uri = Uri.fromFile(out);
-                        runOnUiThread(new Runnable() {
-                            public void run() {
-                                Intent i = new Intent(Intent.ACTION_VIEW);
-                                i.setDataAndType(uri, "application/vnd.android.package-archive");
-                                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                startActivity(i);
-                            }
-                        });
-                    } catch (Exception e) {
-                        notifyUpdateFailed();
+        public void installBytes(final String b64) {
+            try {
+                byte[] data = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+                File out = new File(Environment.getExternalStoragePublicDirectory(
+                        Environment.DIRECTORY_DOWNLOADS), "zpix-update.apk");
+                FileOutputStream fo = new FileOutputStream(out);
+                fo.write(data);
+                fo.flush();
+                fo.close();
+                final Uri uri = Uri.fromFile(out);
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        Intent i = new Intent(Intent.ACTION_VIEW);
+                        i.setDataAndType(uri, "application/vnd.android.package-archive");
+                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(i);
                     }
-                }
-            }).start();
+                });
+            } catch (Exception e) {
+                notifyUpdateFailed();
+            }
         }
 
         private void notifyUpdateFailed() {
