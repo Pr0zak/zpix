@@ -64,7 +64,20 @@ public class MainActivity extends Activity {
         s.setLoadsImagesAutomatically(true);
         s.setDomStorageEnabled(true);
         web.setBackgroundColor(0xFF000000);
-        web.setWebViewClient(new WebViewClient());
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
+                    try {
+                        Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(i);
+                    } catch (Exception e) { }
+                    return true; // open externally; don't navigate the frame
+                }
+                return false;
+            }
+        });
         web.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onConsoleMessage(ConsoleMessage m) {

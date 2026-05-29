@@ -415,7 +415,8 @@
     }
     document.getElementById("aboutVer").textContent = "v" + VERSION;
     document.getElementById("aboutCount").textContent = photos.length + " photos loaded";
-    document.getElementById("aboutRepo").textContent = REPO;
+    document.getElementById("aboutRepo").innerHTML =
+      '<a class="repo-link" href="https://' + REPO + '">' + REPO + '</a>';
     var ub = document.getElementById("btnUpdate");
     ub.textContent = "Check for updates";
     ub.onclick = checkUpdate;
