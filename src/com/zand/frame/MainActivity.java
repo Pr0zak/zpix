@@ -1,12 +1,17 @@
 package com.zand.frame;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
+import android.util.Log;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -15,6 +20,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -46,6 +55,13 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         web.setBackgroundColor(0xFF000000);
         web.setWebViewClient(new WebViewClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage m) {
+                Log.i("zpix", m.message());
+                return true;
+            }
+        });
         web.addJavascriptInterface(new Bridge(), "Android");
 
         setContentView(web);
@@ -105,15 +121,20 @@ public class MainActivity extends Activity {
         public String defaultFolder() { return PHOTO_DIR; }
 
         @JavascriptInterface
-        public String getPhotos(String path) {
+        public String getPhotos(String path, String order) {
             JSONArray arr = new JSONArray();
             try {
                 if (path == null || path.length() == 0) path = PHOTO_DIR;
                 File dir = new File(path);
                 File[] files = dir.listFiles();
                 if (files != null) {
+                    final boolean byDate = "date".equals(order);
                     Arrays.sort(files, new Comparator<File>() {
                         public int compare(File a, File b) {
+                            if (byDate) {
+                                long d = a.lastModified() - b.lastModified(); // oldest -> newest
+                                if (d != 0) return d < 0 ? -1 : 1;
+                            }
                             return a.getName().compareToIgnoreCase(b.getName());
                         }
                     });
@@ -160,6 +181,52 @@ public class MainActivity extends Activity {
                 for (JSONObject o : list) arr.put(o);
             } catch (Exception e) { }
             return arr.toString();
+        }
+
+        // Download an APK from the given URL and launch the system installer.
+        @JavascriptInterface
+        public void installUpdate(final String url) {
+            new Thread(new Runnable() {
+                public void run() {
+                    try {
+                        File out = new File(Environment.getExternalStoragePublicDirectory(
+                                Environment.DIRECTORY_DOWNLOADS), "zpix-update.apk");
+                        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+                        c.setInstanceFollowRedirects(true);
+                        c.setConnectTimeout(15000);
+                        c.setReadTimeout(30000);
+                        c.connect();
+                        InputStream in = c.getInputStream();
+                        FileOutputStream fo = new FileOutputStream(out);
+                        byte[] buf = new byte[8192];
+                        int n;
+                        while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
+                        fo.flush();
+                        fo.close();
+                        in.close();
+                        c.disconnect();
+                        final Uri uri = Uri.fromFile(out);
+                        runOnUiThread(new Runnable() {
+                            public void run() {
+                                Intent i = new Intent(Intent.ACTION_VIEW);
+                                i.setDataAndType(uri, "application/vnd.android.package-archive");
+                                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                startActivity(i);
+                            }
+                        });
+                    } catch (Exception e) {
+                        notifyUpdateFailed();
+                    }
+                }
+            }).start();
+        }
+
+        private void notifyUpdateFailed() {
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    if (web != null) web.loadUrl("javascript:window.zpixUpdateFailed && window.zpixUpdateFailed();");
+                }
+            });
         }
     }
 }

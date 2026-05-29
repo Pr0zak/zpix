@@ -1,12 +1,20 @@
 #!/bin/bash
 set -euo pipefail
 
-SDK=/home/spider/tools/android-sdk
-BT=$SDK/build-tools/35.0.0
-AJAR=$SDK/platforms/android-35/android.jar
-PROJ=/home/spider/zandframe
-OUT=$PROJ/build
-KS=$PROJ/debug.keystore
+PROJ="$(cd "$(dirname "$0")" && pwd)"
+SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/home/spider/tools/android-sdk}}"
+BT="${BT:-$(ls -d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -1)}"
+AJAR="${AJAR:-$(ls "$SDK"/platforms/android-*/android.jar 2>/dev/null | sort -V | tail -1)}"
+KS="${KS:-$PROJ/debug.keystore}"
+KS_PASS="${KS_PASS:-android}"
+KEY_ALIAS="${KEY_ALIAS:-zpix}"
+OUT="$PROJ/build"
+
+[ -n "$BT" ]   || { echo "ERROR: no build-tools under $SDK"; exit 1; }
+[ -n "$AJAR" ] || { echo "ERROR: no platform android.jar under $SDK"; exit 1; }
+echo "SDK=$SDK"
+echo "BT=$BT"
+echo "AJAR=$AJAR"
 
 rm -rf "$OUT"
 mkdir -p "$OUT/classes" "$OUT/dex" "$OUT/gen"
@@ -43,12 +51,13 @@ cp "$OUT/base.apk" "$OUT/unaligned.apk"
 
 echo "[6/6] sign"
 if [ ! -f "$KS" ]; then
-  echo "  creating debug keystore"
-  keytool -genkeypair -keystore "$KS" -alias zpix -storepass android -keypass android \
+  echo "  creating keystore $KS"
+  keytool -genkeypair -keystore "$KS" -alias "$KEY_ALIAS" \
+    -storepass "$KS_PASS" -keypass "$KS_PASS" \
     -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=zpix" >/dev/null 2>&1
 fi
 "$BT/apksigner" sign \
-  --ks "$KS" --ks-pass pass:android --key-pass pass:android --ks-key-alias zpix \
+  --ks "$KS" --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" --ks-key-alias "$KEY_ALIAS" \
   --v1-signing-enabled true --v2-signing-enabled true \
   --out "$OUT/zpix.apk" "$OUT/zpix-aligned.apk"
 

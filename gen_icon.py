@@ -70,6 +70,10 @@ for d, sz in sizes.items():
     os.makedirs(os.path.join(OUT, d), exist_ok=True)
     base.resize((sz, sz), Image.LANCZOS).save(os.path.join(OUT, d, "ic_launcher.png"))
 
-# a preview for review
+# committable logo for the README
+os.makedirs("/home/spider/zandframe/docs", exist_ok=True)
+base.resize((512, 512), Image.LANCZOS).save("/home/spider/zandframe/docs/logo.png")
+
+# a preview for review (gitignored)
 base.resize((256, 256), Image.LANCZOS).save("/home/spider/zandframe/icon_preview.png")
 print("icons written to", OUT)

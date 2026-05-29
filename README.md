@@ -1,4 +1,12 @@
-# zpix
+<p align="center">
+  <img src="docs/logo.png" width="150" alt="zpix logo">
+</p>
+
+<h1 align="center">zpix</h1>
+
+<p align="center">A lightweight, fully-offline digital <b>photo frame</b> for Android — giving an old tablet a second life.<br>No accounts, no cloud, no nag screens.</p>
+
+---
 
 A lightweight, fully-offline digital **photo frame** app for Android — built to give an old tablet a second life. No accounts, no cloud, no nag screens.
 

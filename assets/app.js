@@ -7,14 +7,15 @@
   var stage, msg, splash, clockEl, settingsEl;
   var photos = [], order = [], cursor = 0;
   var currentScene = null, running = false, timer = null, clockTimer = null;
-  var dSingle, dMosaic, dFloat, bag;
+  var dSingle, dMosaic, dFloat, bag, TS = 1;
   var pendingFolder = null;
 
   var DEFAULTS = {
-    folder: "", dwell: 9, multi: 8, shuffle: true, clock: false,
+    folder: "", dwell: 9, multi: 8, order: "random", fit: "contain", speed: "normal", clock: false,
     tx: { kenburns: true, fade: true, slide: true, mosaic: true, float: true, origami: true }
   };
   var WEIGHT = { kenburns: 3, fade: 2, slide: 1, mosaic: 2, float: 2, origami: 1 };
+  var SPEEDS = { slow: 1.8, normal: 1.0, fast: 0.5 };
   var settings = null;
 
   // ---------- settings persistence ----------
@@ -52,7 +53,7 @@
   function rebuildOrder() {
     order = [];
     for (var i = 0; i < photos.length; i++) order.push(i);
-    if (settings.shuffle) shuffle(order);
+    if (settings.order === "random") shuffle(order); // name/date come pre-sorted from native
     cursor = 0;
   }
   function nextUrl() {
@@ -146,7 +147,7 @@
       p.appendChild(img); wrap.appendChild(p); panels.push(p);
     }
     s.appendChild(wrap); mountAbove(s); void s.offsetWidth;
-    panels.forEach(function (p, i) { setTimeout(function () { p.classList.add("unfold"); }, 110 * i); });
+    panels.forEach(function (p, i) { setTimeout(function () { p.classList.add("unfold"); }, 110 * TS * i); });
     return s;
   }
 
@@ -197,7 +198,7 @@
       t.animate(
         [{ opacity: 0, transform: "translate(" + jx + "px," + (jy - 26) + "px) rotate(" + rot + "deg) scale(.82)" },
          { opacity: 1, transform: "translate(" + jx + "px," + jy + "px) rotate(" + rot + "deg) scale(1)" }],
-        { duration: 700, delay: i * 85 + 40, easing: "cubic-bezier(.2,.7,.2,1)", fill: "both" }
+        { duration: 700 * TS, delay: (i * 85 * TS) + 40, easing: "cubic-bezier(.2,.7,.2,1)", fill: "both" }
       );
     });
     return s;
@@ -288,8 +289,20 @@
     dMosaic = Math.round(settings.dwell * 1000 * 1.5);
     dFloat = Math.round(settings.dwell * 1000 * 2.0);
   }
+  function applySpeed() {
+    var m = SPEEDS[settings.speed] || 1.0;
+    TS = m;
+    var root = document.documentElement;
+    root.style.setProperty("--t-fade", (1.6 * m) + "s");
+    root.style.setProperty("--t-slide", (1.4 * m) + "s");
+    root.style.setProperty("--t-fold", (1.5 * m) + "s");
+  }
+  function applyFit() {
+    document.documentElement.style.setProperty("--photo-fit", settings.fit || "contain");
+  }
   function loadPhotos() {
     var folder = settings.folder;
+    var nat = (settings.order === "date") ? "date" : "name";
     try {
       if (!folder) {
         // first run: pick the folder with the most photos
@@ -299,7 +312,7 @@
         }
         if (!folder && window.Android && window.Android.defaultFolder) folder = window.Android.defaultFolder();
       }
-      var json = (window.Android && window.Android.getPhotos) ? window.Android.getPhotos(folder) : "[]";
+      var json = (window.Android && window.Android.getPhotos) ? window.Android.getPhotos(folder, nat) : "[]";
       photos = JSON.parse(json);
     } catch (e) { photos = []; }
   }
@@ -313,6 +326,8 @@
     stopShow();
     loadPhotos();
     applyTimings();
+    applySpeed();
+    applyFit();
     bag = buildBag();
     applyClock();
     if (!photos.length) {
@@ -390,7 +405,9 @@
     document.getElementById("dwellVal").textContent = settings.dwell;
     document.getElementById("multi").value = settings.multi;
     document.getElementById("multiVal").textContent = settings.multi;
-    document.getElementById("shuffle").checked = !!settings.shuffle;
+    selectPill("grpOrder", settings.order);
+    selectPill("grpFit", settings.fit);
+    selectPill("grpSpeed", settings.speed);
     document.getElementById("clock").checked = !!settings.clock;
     var boxes = document.querySelectorAll("[data-tx]");
     for (var i = 0; i < boxes.length; i++) {
@@ -399,15 +416,83 @@
     document.getElementById("aboutVer").textContent = "v" + VERSION;
     document.getElementById("aboutCount").textContent = photos.length + " photos loaded";
     document.getElementById("aboutRepo").textContent = REPO;
+    var ub = document.getElementById("btnUpdate");
+    ub.textContent = "Check for updates";
+    ub.onclick = checkUpdate;
+    document.getElementById("updStatus").textContent = "";
     buildFolderList();
     settingsEl.classList.remove("hidden");
   }
   function closeSettings() { settingsEl.classList.add("hidden"); }
 
+  // ---------- self-update ----------
+
+  function cmpVer(a, b) {
+    var pa = String(a).split("."), pb = String(b).split(".");
+    for (var i = 0; i < 3; i++) {
+      var x = parseInt(pa[i], 10) || 0, y = parseInt(pb[i], 10) || 0;
+      if (x !== y) return x - y;
+    }
+    return 0;
+  }
+  function setUpd(s) {
+    var st = document.getElementById("updStatus");
+    if (st) st.textContent = s;
+    if (window.console && console.log) console.log("ZPIXUPD: " + s);
+  }
+  function checkUpdate() {
+    var btn = document.getElementById("btnUpdate");
+    setUpd("Checking…");
+    fetch("https://api.github.com/repos/Pr0zak/zpix/releases/latest",
+          { headers: { "Accept": "application/vnd.github+json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (rel) {
+        var tag = (rel && rel.tag_name ? rel.tag_name : "").replace(/^v/, "");
+        if (!tag) { setUpd("No releases yet"); return; }
+        if (cmpVer(tag, VERSION) > 0) {
+          var apk = (rel.assets || []).filter(function (a) { return /\.apk$/i.test(a.name); })[0];
+          if (apk) {
+            setUpd("Update available");
+            btn.textContent = "Install v" + tag;
+            btn.onclick = function () {
+              setUpd("Downloading v" + tag + "…");
+              if (window.Android && window.Android.installUpdate) window.Android.installUpdate(apk.browser_download_url);
+            };
+          } else {
+            setUpd("v" + tag + " available (no APK)");
+          }
+        } else {
+          setUpd("Up to date (v" + VERSION + ")");
+        }
+      })
+      .catch(function () { setUpd("Check failed (no network?)"); });
+  }
+  window.zpixUpdateFailed = function () {
+    var st = document.getElementById("updStatus");
+    if (st) st.textContent = "Download failed";
+  };
+
+  function selectPill(groupId, val) {
+    var g = document.getElementById(groupId);
+    if (!g) return;
+    var bs = g.getElementsByClassName("pill");
+    for (var i = 0; i < bs.length; i++) {
+      bs[i].classList.toggle("sel", bs[i].getAttribute("data-val") === val);
+    }
+  }
+  function getPill(groupId) {
+    var g = document.getElementById(groupId);
+    if (!g) return null;
+    var sel = g.getElementsByClassName("sel")[0];
+    return sel ? sel.getAttribute("data-val") : null;
+  }
+
   function saveAndRestart() {
     settings.dwell = parseInt(document.getElementById("dwell").value, 10) || 9;
     settings.multi = parseInt(document.getElementById("multi").value, 10) || 8;
-    settings.shuffle = document.getElementById("shuffle").checked;
+    settings.order = getPill("grpOrder") || settings.order;
+    settings.fit = getPill("grpFit") || settings.fit;
+    settings.speed = getPill("grpSpeed") || settings.speed;
     settings.clock = document.getElementById("clock").checked;
     var boxes = document.querySelectorAll("[data-tx]");
     for (var i = 0; i < boxes.length; i++) {
@@ -426,6 +511,18 @@
     document.getElementById("multi").addEventListener("input", function () {
       document.getElementById("multiVal").textContent = this.value;
     });
+    ["grpOrder", "grpFit", "grpSpeed"].forEach(function (gid) {
+      var g = document.getElementById(gid);
+      if (!g) return;
+      g.addEventListener("click", function (e) {
+        var btn = e.target.closest ? e.target.closest(".pill") : null;
+        if (!btn || !g.contains(btn)) return;
+        var bs = g.getElementsByClassName("pill");
+        for (var i = 0; i < bs.length; i++) bs[i].classList.remove("sel");
+        btn.classList.add("sel");
+      });
+    });
+    document.getElementById("btnUpdate").onclick = checkUpdate;
     document.getElementById("btnSave").addEventListener("click", saveAndRestart);
     document.getElementById("btnClose").addEventListener("click", closeSettings);
     settingsEl.addEventListener("click", function (e) {

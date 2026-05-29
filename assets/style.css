@@ -1,5 +1,12 @@
 * { box-sizing: border-box; }
 
+:root {
+  --t-fade: 1.6s;
+  --t-slide: 1.4s;
+  --t-fold: 1.5s;
+  --photo-fit: contain;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -59,7 +66,7 @@ html, body {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: var(--photo-fit, contain);
   z-index: 1;
 }
 
@@ -76,13 +83,13 @@ html, body {
 
 /* ---- fade ---- */
 .fade-enter { opacity: 0; }
-.fade-in { transition: opacity 1.6s ease; opacity: 1; }
-.fade-out { transition: opacity 1.6s ease; opacity: 0; }
+.fade-in { transition: opacity var(--t-fade) ease; opacity: 1; }
+.fade-out { transition: opacity var(--t-fade) ease; opacity: 0; }
 
 /* ---- slide ---- */
 .slide-enter { transform: translateX(100%); }
-.slide-in { transition: transform 1.4s cubic-bezier(.7,0,.2,1); transform: translateX(0); }
-.slide-out-left { transition: transform 1.4s cubic-bezier(.7,0,.2,1); transform: translateX(-100%); }
+.slide-in { transition: transform var(--t-slide) cubic-bezier(.7,0,.2,1); transform: translateX(0); }
+.slide-out-left { transition: transform var(--t-slide) cubic-bezier(.7,0,.2,1); transform: translateX(-100%); }
 
 /* ---- scattered collage ---- */
 .mosaic {
@@ -255,6 +262,24 @@ input[type=range] { width: 100%; height: 5vh; }
 .btn.primary { background: #6b7bff; color: #fff; }
 .btn.ghost { background: #262a36; color: #cfd3df; }
 
+.pillgroup { display: flex; gap: 1.2vh; flex-wrap: wrap; }
+.pill {
+  flex: 1 1 0;
+  min-width: 14vh;
+  padding: 1.6vh 2vh;
+  font-size: 2.4vh;
+  font-weight: 600;
+  color: #cfd3df;
+  background: #1d2130;
+  border: 2px solid transparent;
+  border-radius: 1.2vh;
+}
+.pill.sel { background: #34407a; border-color: #6b7bff; color: #fff; }
+
+.update-row { display: flex; align-items: center; gap: 1.6vh; margin-top: 1.2vh; }
+.update-row .btn { font-size: 2.2vh; padding: 1.2vh 2.4vh; }
+#updStatus { color: #aeb3c4; font-size: 2.2vh; }
+
 /* ---- origami fold ---- */
 .origami {
   position: absolute;
@@ -280,6 +305,6 @@ input[type=range] { width: 100%; height: 5vh; }
   max-width: none;
 }
 .opanel.unfold {
-  transition: transform 1.5s cubic-bezier(.6,.05,.2,1);
+  transition: transform var(--t-fold) cubic-bezier(.6,.05,.2,1);
   transform: rotateY(0deg);
 }

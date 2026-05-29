@@ -66,7 +66,32 @@
       </section>
 
       <section>
-        <label class="row"><input type="checkbox" id="shuffle"><span>Shuffle photos (random order)</span></label>
+        <div class="lbl">Order</div>
+        <div class="pillgroup" id="grpOrder">
+          <button class="pill" data-val="random">Random</button>
+          <button class="pill" data-val="name">By name</button>
+          <button class="pill" data-val="date">By date</button>
+        </div>
+      </section>
+
+      <section>
+        <div class="lbl">Image fit (single photos)</div>
+        <div class="pillgroup" id="grpFit">
+          <button class="pill" data-val="contain">Fit whole</button>
+          <button class="pill" data-val="cover">Fill screen</button>
+        </div>
+      </section>
+
+      <section>
+        <div class="lbl">Transition speed</div>
+        <div class="pillgroup" id="grpSpeed">
+          <button class="pill" data-val="slow">Slow</button>
+          <button class="pill" data-val="normal">Normal</button>
+          <button class="pill" data-val="fast">Fast</button>
+        </div>
+      </section>
+
+      <section>
         <label class="row"><input type="checkbox" id="clock"><span>Show clock</span></label>
       </section>
 
@@ -87,6 +112,10 @@
         <div class="about-row">zpix <b id="aboutVer"></b></div>
         <div class="about-row" id="aboutCount"></div>
         <div class="about-row" id="aboutRepo"></div>
+        <div class="about-row update-row">
+          <button id="btnUpdate" class="btn ghost">Check for updates</button>
+          <span id="updStatus"></span>
+        </div>
       </section>
 
     </div>
