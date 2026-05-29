@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJ="$(cd "$(dirname "$0")" && pwd)"
-SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/home/spider/tools/android-sdk}}"
+SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/tools/android-sdk}}"
 BT="${BT:-$(ls -d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -1)}"
 AJAR="${AJAR:-$(ls "$SDK"/platforms/android-*/android.jar 2>/dev/null | sort -V | tail -1)}"
 KS="${KS:-$PROJ/debug.keystore}"

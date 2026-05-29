@@ -2,7 +2,8 @@
 from PIL import Image, ImageDraw
 import os
 
-OUT = "/home/spider/zandframe/res"
+ROOT = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.join(ROOT, "res")
 S = 1024
 
 c0 = (0x5b, 0x6b, 0xff)
@@ -71,9 +72,9 @@ for d, sz in sizes.items():
     base.resize((sz, sz), Image.LANCZOS).save(os.path.join(OUT, d, "ic_launcher.png"))
 
 # committable logo for the README
-os.makedirs("/home/spider/zandframe/docs", exist_ok=True)
-base.resize((512, 512), Image.LANCZOS).save("/home/spider/zandframe/docs/logo.png")
+os.makedirs(os.path.join(ROOT, "docs"), exist_ok=True)
+base.resize((512, 512), Image.LANCZOS).save(os.path.join(ROOT, "docs", "logo.png"))
 
 # a preview for review (gitignored)
-base.resize((256, 256), Image.LANCZOS).save("/home/spider/zandframe/icon_preview.png")
+base.resize((256, 256), Image.LANCZOS).save(os.path.join(ROOT, "icon_preview.png"))
 print("icons written to", OUT)
