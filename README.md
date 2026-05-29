@@ -20,6 +20,21 @@ It's a tiny native shell hosting a WebView; the slideshow engine is plain HTML/C
 - **Always-on**: keeps the screen awake and auto-starts on boot.
 - Runs on **Android 5.1+** (API 22).
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/shot-collage.png" alt="Scattered collage"><br><sub>Scattered collage</sub></td>
+    <td align="center"><img src="docs/shot-floating.png" alt="Floating photos"><br><sub>Floating photos</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/shot-settings.png" alt="Settings"><br><sub>Settings</sub></td>
+    <td align="center"><img src="docs/shot-splash.png" alt="Splash screen"><br><sub>Splash screen</sub></td>
+  </tr>
+</table>
+
+<sub>Screenshots use royalty-free placeholder photos.</sub>
+
 ## Build
 
 No Gradle required — the app has zero third-party dependencies.

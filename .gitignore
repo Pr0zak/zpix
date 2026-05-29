@@ -14,3 +14,6 @@ shots/
 # misc
 .gradle/
 .DS_Store
+
+# screenshot scratch (generic demo photos)
+ghshots/
