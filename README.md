@@ -18,7 +18,7 @@ zpix turns an old Android tablet into an always-on photo frame. No accounts, no 
 ## Features
 
 - **Offline & local** — plays photos straight from folders on the device; no network needed.
-- **Transitions** — Ken Burns, crossfade, slide, scattered collage, floating photos, and an Apple-style **origami grid** (tiles fold to reveal new photos).
+- **Transitions** — Ken Burns, crossfade, slide, scattered collage, floating photos, and an **origami grid** (tiles fold to reveal new photos).
 - **Settings** (tap the screen) — photo folder, seconds per photo, photos per collage, photo size, order (random / name / date), image fit, transition speed, clock, and per-transition toggles.
 - **Always-on** — keeps the screen awake and auto-starts on boot.
 - **Self-update** — checks GitHub Releases and installs new versions in place.
