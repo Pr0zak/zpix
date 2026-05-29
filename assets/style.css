@@ -281,31 +281,23 @@ input[type=range] { width: 100%; height: 5vh; }
 .update-row .btn { font-size: 2.2vh; padding: 1.2vh 2.4vh; }
 #updStatus { color: #aeb3c4; font-size: 2.2vh; }
 
-/* ---- origami fold ---- */
-.origami {
+/* ---- origami grid wall (tiles fold to reveal new photos) ---- */
+.ogrid {
   position: absolute;
   inset: 0;
   z-index: 1;
-  perspective: 1600px;
-  perspective-origin: 50% 50%;
+  background: #000;
 }
-.opanel {
+.ocell {
   position: absolute;
-  top: 0;
-  height: 100%;
   overflow: hidden;
+  transform-origin: center center;
   backface-visibility: hidden;
-  transform: rotateY(90deg);
   will-change: transform;
 }
-.opanel img {
-  position: absolute;
-  top: 0;
+.ocell img {
+  display: block;
+  width: 100%;
   height: 100%;
   object-fit: cover;
-  max-width: none;
-}
-.opanel.unfold {
-  transition: transform var(--t-fold) cubic-bezier(.6,.05,.2,1);
-  transform: rotateY(0deg);
 }

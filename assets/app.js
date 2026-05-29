@@ -7,15 +7,16 @@
   var stage, msg, splash, clockEl, settingsEl;
   var photos = [], order = [], cursor = 0;
   var currentScene = null, running = false, timer = null, clockTimer = null;
-  var dSingle, dMosaic, dFloat, bag, TS = 1;
+  var dSingle, dMosaic, dFloat, dGrid, bag, TS = 1;
   var pendingFolder = null;
 
   var DEFAULTS = {
-    folder: "", dwell: 9, multi: 8, order: "random", fit: "contain", speed: "normal", clock: false,
+    folder: "", dwell: 9, multi: 8, order: "random", fit: "contain", speed: "normal", size: "medium", clock: false,
     tx: { kenburns: true, fade: true, slide: true, mosaic: true, float: true, origami: true }
   };
   var WEIGHT = { kenburns: 3, fade: 2, slide: 1, mosaic: 2, float: 2, origami: 1 };
   var SPEEDS = { slow: 1.8, normal: 1.0, fast: 0.5 };
+  var SIZES = { small: 0.34, medium: 0.46, large: 0.60 }; // floating card height as fraction of screen
   var settings = null;
 
   // ---------- settings persistence ----------
@@ -93,6 +94,7 @@
   function mountAbove(scene) { stage.appendChild(scene); }
   function retire(scene) {
     if (!scene) return;
+    if (scene._oflip) { clearInterval(scene._oflip); scene._oflip = null; }
     var imgs = scene.getElementsByTagName("img");
     for (var i = 0; i < imgs.length; i++) imgs[i].src = "";
     if (scene.parentNode) scene.parentNode.removeChild(scene);
@@ -133,21 +135,53 @@
     if (currentScene) currentScene.classList.add("slide-out-left");
     return s;
   }
-  function tOrigami(url, w) {
-    var s = newScene(); addBg(s, url);
-    var wrap = document.createElement("div"); wrap.className = "origami";
-    var N = 8, colW = w / N, panels = [];
-    for (var i = 0; i < N; i++) {
-      var p = document.createElement("div"); p.className = "opanel";
-      p.style.left = (i * colW) + "px"; p.style.width = colW + "px";
-      p.style.transformOrigin = (i % 2 === 0) ? "left center" : "right center";
-      p.style.transform = "rotateY(" + ((i % 2 === 0) ? 92 : -92) + "deg)";
-      var img = document.createElement("img"); img.src = url;
-      img.style.width = w + "px"; img.style.left = (-i * colW) + "px";
-      p.appendChild(img); wrap.appendChild(p); panels.push(p);
+  // Apple-style "Origami": a grid wall whose tiles periodically fold over to
+  // reveal different photos, holding the grid a while before the scene changes.
+  function foldTile(cell, img, newUrl) {
+    var dur = 280 * TS;
+    var a1 = cell.animate(
+      [{ transform: "perspective(900px) rotateX(0deg)" },
+       { transform: "perspective(900px) rotateX(-90deg)" }],
+      { duration: dur, easing: "ease-in", fill: "forwards" });
+    a1.onfinish = function () {
+      img.src = newUrl;
+      cell.animate(
+        [{ transform: "perspective(900px) rotateX(90deg)" },
+         { transform: "perspective(900px) rotateX(0deg)" }],
+        { duration: dur, easing: "ease-out", fill: "forwards" });
+    };
+  }
+
+  function tOrigami(items) {
+    var s = newScene();
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var cols = 4, rows = 3;
+    var cellW = vw / cols, cellH = vh / rows;
+    var grid = document.createElement("div"); grid.className = "ogrid";
+    var tiles = [], pi = 0;
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        var cell = document.createElement("div"); cell.className = "ocell";
+        cell.style.left = (c * cellW) + "px"; cell.style.top = (r * cellH) + "px";
+        cell.style.width = Math.ceil(cellW) + "px"; cell.style.height = Math.ceil(cellH) + "px";
+        var img = document.createElement("img"); img.src = items[pi % items.length].url; pi++;
+        cell.appendChild(img); grid.appendChild(cell);
+        tiles.push({ el: cell, img: img });
+      }
     }
-    s.appendChild(wrap); mountAbove(s); void s.offsetWidth;
-    panels.forEach(function (p, i) { setTimeout(function () { p.classList.add("unfold"); }, 110 * TS * i); });
+    s.appendChild(grid);
+    s.classList.add("fade-enter"); mountAbove(s); void s.offsetWidth;
+    s.classList.remove("fade-enter"); s.classList.add("fade-in");
+
+    // periodically fold a random tile to a fresh photo
+    s._oflip = setInterval(function () {
+      if (!running || !s.parentNode) return;
+      var t = tiles[Math.floor(Math.random() * tiles.length)];
+      var nu = nextUrl();
+      preloadFull(nu).then(function (it) {
+        if (it.ok && s.parentNode) foldTile(t.el, t.img, nu);
+      });
+    }, Math.round(620 * TS));
     return s;
   }
 
@@ -192,7 +226,9 @@
       });
       grid.appendChild(rowEl);
     });
-    s.appendChild(grid); mountAbove(s); void s.offsetWidth;
+    s.appendChild(grid);
+    s.classList.add("fade-enter"); mountAbove(s); void s.offsetWidth;
+    s.classList.remove("fade-enter"); s.classList.add("fade-in");
     tiles.forEach(function (t, i) {
       var rot = rand(-7, 7), jx = rand(-gap, gap), jy = rand(-gap, gap);
       t.animate(
@@ -209,26 +245,47 @@
   function tFloat(items) {
     var s = newScene();
     var vw = window.innerWidth, vh = window.innerHeight;
+    var n = items.length;
+    // lay out shuffled grid cells so photos spread across the screen
+    var cols = Math.max(2, Math.round(Math.sqrt(n * vw / vh)));
+    var rows = Math.ceil(n / cols);
+    var cellW = vw / cols, cellH = vh / rows;
+    var cells = [];
+    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) cells.push([c, r]);
+    shuffle(cells);
+
     items.forEach(function (it, idx) {
-      var h = vh * rand(0.30, 0.52), w = h * (it.ratio || 1.4);
+      var cell = cells[idx % cells.length];
+      var cx = (cell[0] + 0.5) * cellW, cy = (cell[1] + 0.5) * cellH;
+      var ratio = it.ratio || 1.4;
+      // size relative to the screen (per the Photo size setting); cells only set
+      // position, so photos stay spread out but can be large and overlap a little
+      var base = SIZES[settings.size] || 0.46;
+      var h = vh * base * rand(0.88, 1.14), w = h * ratio;
+      var maxW = vw * 0.66;
+      if (w > maxW) { w = maxW; h = w / ratio; }
+
       var card = document.createElement("div"); card.className = "floater";
       card.style.width = Math.round(w) + "px"; card.style.height = Math.round(h) + "px";
       card.style.zIndex = String(Math.floor(rand(1, 30)));
       var img = document.createElement("img"); img.src = it.url;
       card.appendChild(img); s.appendChild(card);
-      var sx = rand(-w * 0.2, vw - w * 0.8), sy = rand(-h * 0.2, vh - h * 0.8);
-      var ex = sx + rand(-0.22, 0.22) * vw, ey = sy + rand(-0.18, 0.18) * vh;
-      var rot0 = rand(-4, 4), rot1 = rot0 + rand(-3, 3);
-      var z0 = rand(0.95, 1.05), z1 = z0 + rand(0.08, 0.28);
-      var dur = rand(15000, 23000);
+
+      var jx = rand(-0.16, 0.16) * cellW, jy = rand(-0.16, 0.16) * cellH;
+      var sx = cx - w / 2 + jx, sy = cy - h / 2 + jy;
+      var dx = rand(-0.08, 0.08) * vw, dy = rand(-0.07, 0.07) * vh;
+      var rot0 = rand(-3, 3), rot1 = rot0 + rand(-2, 2);
+      var z0 = rand(0.96, 1.04), z1 = z0 + rand(0.05, 0.18);
+      var dur = rand(16000, 24000);
       card.animate(
         [{ opacity: 0, transform: "translate(" + sx + "px," + sy + "px) rotate(" + rot0 + "deg) scale(" + z0 + ")" },
-         { opacity: 1, offset: 0.12 }, { opacity: 1, offset: 0.85 },
-         { opacity: 0, transform: "translate(" + ex + "px," + ey + "px) rotate(" + rot1 + "deg) scale(" + z1 + ")" }],
-        { duration: dur, delay: idx * 1500, easing: "linear", fill: "both" }
+         { opacity: 1, offset: 0.14 }, { opacity: 1, offset: 0.85 },
+         { opacity: 0, transform: "translate(" + (sx + dx) + "px," + (sy + dy) + "px) rotate(" + rot1 + "deg) scale(" + z1 + ")" }],
+        { duration: dur, delay: idx * 1100, easing: "linear", fill: "both" }
       );
     });
-    mountAbove(s);
+    s.classList.add("fade-enter"); mountAbove(s); void s.offsetWidth;
+    s.classList.remove("fade-enter"); s.classList.add("fade-in");
     return s;
   }
 
@@ -249,20 +306,22 @@
     var type = chooseType();
     var w = window.innerWidth;
 
-    if (type === "mosaic" || type === "float") {
-      var count = (type === "float")
-        ? clamp(Math.round(settings.multi * 0.75), 3, 12)
-        : clamp(settings.multi, 2, 20);
+    if (type === "mosaic" || type === "float" || type === "origami") {
+      var count = (type === "float") ? clamp(Math.round(settings.multi * 0.75), 3, 12)
+                : (type === "origami") ? 12
+                : clamp(settings.multi, 2, 20);
       var urls = nextUrls(count);
       Promise.all(urls.map(preloadFull)).then(function (items) {
         if (!running) return;
         items = items.filter(function (it) { return it.ok; });
         if (items.length < 3) { timer = setTimeout(step, 50); return; }
         var prev = currentScene;
-        var sc = (type === "float") ? tFloat(items) : tMosaic(items);
+        var sc = (type === "float") ? tFloat(items)
+               : (type === "origami") ? tOrigami(items)
+               : tMosaic(items);
         currentScene = sc;
         setTimeout(function () { retire(prev); }, 2000);
-        timer = setTimeout(step, (type === "float") ? dFloat : dMosaic);
+        timer = setTimeout(step, (type === "float") ? dFloat : (type === "origami") ? dGrid : dMosaic);
       });
       return;
     }
@@ -274,7 +333,6 @@
       var prev = currentScene, sc;
       if (type === "kenburns") sc = tKenBurns(url);
       else if (type === "slide") sc = tSlide(url);
-      else if (type === "origami") sc = tOrigami(url, w);
       else sc = tFade(url);
       currentScene = sc;
       setTimeout(function () { retire(prev); }, 1800);
@@ -288,6 +346,7 @@
     dSingle = settings.dwell * 1000;
     dMosaic = Math.round(settings.dwell * 1000 * 1.5);
     dFloat = Math.round(settings.dwell * 1000 * 2.0);
+    dGrid = Math.round(settings.dwell * 1000 * 2.4); // origami wall stays a while
   }
   function applySpeed() {
     var m = SPEEDS[settings.speed] || 1.0;
@@ -305,12 +364,13 @@
     var nat = (settings.order === "date") ? "date" : "name";
     try {
       if (!folder) {
-        // first run: pick the folder with the most photos
+        // first run: pick the folder with the most photos, and remember it
         if (window.Android && window.Android.getFolders) {
           var folders = JSON.parse(window.Android.getFolders());
           if (folders.length) folder = folders[0].path;
         }
         if (!folder && window.Android && window.Android.defaultFolder) folder = window.Android.defaultFolder();
+        if (folder) { settings.folder = folder; saveSettings(); }
       }
       var json = (window.Android && window.Android.getPhotos) ? window.Android.getPhotos(folder, nat) : "[]";
       photos = JSON.parse(json);
@@ -319,6 +379,10 @@
   function stopShow() {
     running = false;
     if (timer) { clearTimeout(timer); timer = null; }
+    var scenes = stage.getElementsByClassName("scene");
+    for (var i = 0; i < scenes.length; i++) {
+      if (scenes[i]._oflip) { clearInterval(scenes[i]._oflip); scenes[i]._oflip = null; }
+    }
     while (stage.firstChild) stage.removeChild(stage.firstChild);
     currentScene = null;
   }
@@ -408,6 +472,7 @@
     selectPill("grpOrder", settings.order);
     selectPill("grpFit", settings.fit);
     selectPill("grpSpeed", settings.speed);
+    selectPill("grpSize", settings.size);
     document.getElementById("clock").checked = !!settings.clock;
     var boxes = document.querySelectorAll("[data-tx]");
     for (var i = 0; i < boxes.length; i++) {
@@ -495,6 +560,7 @@
     settings.order = getPill("grpOrder") || settings.order;
     settings.fit = getPill("grpFit") || settings.fit;
     settings.speed = getPill("grpSpeed") || settings.speed;
+    settings.size = getPill("grpSize") || settings.size;
     settings.clock = document.getElementById("clock").checked;
     var boxes = document.querySelectorAll("[data-tx]");
     for (var i = 0; i < boxes.length; i++) {
@@ -513,7 +579,7 @@
     document.getElementById("multi").addEventListener("input", function () {
       document.getElementById("multiVal").textContent = this.value;
     });
-    ["grpOrder", "grpFit", "grpSpeed"].forEach(function (gid) {
+    ["grpOrder", "grpFit", "grpSpeed", "grpSize"].forEach(function (gid) {
       var g = document.getElementById(gid);
       if (!g) return;
       g.addEventListener("click", function (e) {

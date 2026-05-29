@@ -173,29 +173,15 @@ public class MainActivity extends Activity {
             return arr.toString();
         }
 
-        // Top-level folders under /sdcard that contain images, with counts.
+        // Folders under /sdcard (and one level of subfolders) that contain
+        // images, with counts. Catches nested locations like DCIM/Camera.
         @JavascriptInterface
         public String getFolders() {
             JSONArray arr = new JSONArray();
             try {
                 File root = new File("/sdcard");
-                File[] dirs = root.listFiles();
                 ArrayList<JSONObject> list = new ArrayList<JSONObject>();
-                if (dirs != null) {
-                    for (File d : dirs) {
-                        if (!d.isDirectory()) continue;
-                        String dn = d.getName();
-                        if (dn.startsWith(".") || dn.equalsIgnoreCase("Android")) continue;
-                        int c = countImages(d);
-                        if (c > 0) {
-                            JSONObject o = new JSONObject();
-                            o.put("name", dn);
-                            o.put("path", d.getAbsolutePath());
-                            o.put("count", c);
-                            list.add(o);
-                        }
-                    }
-                }
+                collectFolders(root, 0, list);
                 Collections.sort(list, new Comparator<JSONObject>() {
                     public int compare(JSONObject a, JSONObject b) {
                         return b.optInt("count") - a.optInt("count");
@@ -204,6 +190,34 @@ public class MainActivity extends Activity {
                 for (JSONObject o : list) arr.put(o);
             } catch (Exception e) { }
             return arr.toString();
+        }
+
+        private void collectFolders(File dir, int depth, ArrayList<JSONObject> list) {
+            if (depth > 2) return;
+            File[] kids;
+            try { kids = dir.listFiles(); } catch (Exception e) { return; }
+            if (kids == null) return;
+            if (depth >= 1) {
+                int c = countImages(dir);
+                if (c > 0) {
+                    try {
+                        JSONObject o = new JSONObject();
+                        String rel = dir.getAbsolutePath()
+                                .replaceFirst("^/sdcard/", "")
+                                .replaceFirst("^/storage/emulated/0/", "");
+                        o.put("name", rel);
+                        o.put("path", dir.getAbsolutePath());
+                        o.put("count", c);
+                        list.add(o);
+                    } catch (Exception e) { }
+                }
+            }
+            for (File k : kids) {
+                if (!k.isDirectory()) continue;
+                String n = k.getName();
+                if (n.startsWith(".") || n.equalsIgnoreCase("Android")) continue;
+                collectFolders(k, depth + 1, list);
+            }
         }
 
         // Download the APK natively (manual redirect following) and launch the
