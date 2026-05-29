@@ -440,6 +440,10 @@
     if (st) st.textContent = s;
     if (window.console && console.log) console.log("ZPIXUPD: " + s);
   }
+  function downloadAndInstall(url, tag) {
+    setUpd("Downloading v" + tag + "…");
+    if (window.Android && window.Android.downloadAndInstall) window.Android.downloadAndInstall(url);
+  }
   function checkUpdate() {
     var btn = document.getElementById("btnUpdate");
     setUpd("Checking…");
@@ -454,18 +458,7 @@
           if (apk) {
             setUpd("Update available");
             btn.textContent = "Install v" + tag;
-            btn.onclick = function () {
-              setUpd("Downloading v" + tag + "…");
-              fetch(apk.browser_download_url)
-                .then(function (r) { return r.arrayBuffer(); })
-                .then(function (buf) {
-                  var b = new Uint8Array(buf), s = "", C = 0x8000;
-                  for (var i = 0; i < b.length; i += C) s += String.fromCharCode.apply(null, b.subarray(i, i + C));
-                  setUpd("Installing v" + tag + "…");
-                  if (window.Android && window.Android.installBytes) window.Android.installBytes(btoa(s));
-                })
-                .catch(function () { setUpd("Download failed"); });
-            };
+            btn.onclick = function () { downloadAndInstall(apk.browser_download_url, tag); };
           } else {
             setUpd("v" + tag + " available (no APK)");
           }
