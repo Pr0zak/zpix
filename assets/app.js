@@ -138,7 +138,7 @@
   // Apple-style "Origami": a grid wall whose tiles periodically fold over to
   // reveal different photos, holding the grid a while before the scene changes.
   function foldTile(cell, img, newUrl) {
-    var dur = 280 * TS;
+    var dur = 360 * TS;
     var a1 = cell.animate(
       [{ transform: "perspective(900px) rotateX(0deg)" },
        { transform: "perspective(900px) rotateX(-90deg)" }],
@@ -181,7 +181,7 @@
       preloadFull(nu).then(function (it) {
         if (it.ok && s.parentNode) foldTile(t.el, t.img, nu);
       });
-    }, Math.round(620 * TS));
+    }, Math.round(2000 * TS));
     return s;
   }
 
