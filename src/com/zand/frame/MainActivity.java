@@ -259,7 +259,7 @@ public class MainActivity extends Activity {
         // Trust-all factory for the update download only. Safe because the package
     // installer rejects any APK not signed with our release key, so a tampered
     // download cannot install — TLS trust here only guards against download DoS.
-    private static SSLSocketFactory trustAllFactory() throws Exception {
+    private SSLSocketFactory trustAllFactory() throws Exception {
         TrustManager[] tm = new TrustManager[]{ new X509TrustManager() {
             public void checkClientTrusted(X509Certificate[] c, String a) { }
             public void checkServerTrusted(X509Certificate[] c, String a) { }
