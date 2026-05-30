@@ -54,7 +54,7 @@ Put some photos on the device (e.g. `/sdcard/Pictures`). On first run zpix uses 
 
 ## Upload from phone or laptop
 
-Enable **Upload server** in Settings. The tablet shows its address (e.g. `http://10.0.0.89:8080`) — open it from any device on the same Wi-Fi.
+Enable **Upload server** in Settings. The tablet shows its address (e.g. `http://192.168.x.x:8080`) — open it from any device on the same Wi-Fi.
 
 - **Upload tab** — tap to pick photos, tap to pick a whole folder, or drag and drop. Folder structure is preserved on the tablet. Each file gets its own progress bar; the queue collapses completed rows automatically so it stays usable with thousands of files. Live storage gauge at the top.
 - **Browse tab** — manages everything that has been uploaded.
