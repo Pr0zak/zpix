@@ -12,7 +12,7 @@
   var browserEl, browserPath = "/sdcard";
 
   var DEFAULTS = {
-    folder: "", folders: [], dwell: 9, multi: 8, order: "random", fit: "contain", speed: "normal", size: "medium", clock: false, showDate: false,
+    folder: "", folders: [], dwell: 9, multi: 8, order: "random", fit: "contain", speed: "normal", size: "medium", clock: false, showDate: false, uploadServer: false,
     tx: {
       kenburns: true, fade: true, slide: true, mosaic: true, float: true, origami: true,
       polaroid: true, magazine: true, filmstrip: true, blinds: true, cube: true
@@ -572,6 +572,33 @@
   function applyFit() {
     document.documentElement.style.setProperty("--photo-fit", settings.fit || "contain");
   }
+  function applyUploadServer() {
+    if (!window.Android) return;
+    if (settings.uploadServer) {
+      if (window.Android.startUploadServer) window.Android.startUploadServer();
+      var dir = window.Android.uploadDir ? window.Android.uploadDir() : "/sdcard/zpix_uploads";
+      if (settings.folders.indexOf(dir) === -1) {
+        settings.folders.push(dir);
+        saveSettings();
+      }
+    } else if (window.Android.stopUploadServer) {
+      window.Android.stopUploadServer();
+    }
+  }
+  function updateUploadInfo() {
+    var info = document.getElementById("uploadInfo");
+    if (!info) return;
+    var cb = document.getElementById("uploadServer");
+    if (!cb || !cb.checked) { info.textContent = ""; return; }
+    var url = (window.Android && window.Android.uploadServerUrl) ? window.Android.uploadServerUrl() : "";
+    if (url) {
+      info.innerHTML = "Open <a class=\"repo-link\" href=\"" + url + "\">" + url + "</a> on a device on the same wifi. Uploads land in " +
+        ((window.Android && window.Android.uploadDir) ? window.Android.uploadDir() : "/sdcard/zpix_uploads") +
+        " (added to your folders automatically).";
+    } else {
+      info.textContent = "Server runs on port 8080 once the tablet is on wifi.";
+    }
+  }
   function loadPhotos() {
     var nat = (settings.order === "date") ? "date" : "name";
     var folders = (settings.folders && settings.folders.length) ? settings.folders.slice() : [];
@@ -607,6 +634,7 @@
   }
   function startShow() {
     stopShow();
+    applyUploadServer();
     loadPhotos();
     applyTimings();
     applySpeed();
@@ -729,6 +757,8 @@
     selectPill("grpSize", settings.size);
     document.getElementById("showClock").checked = !!settings.clock;
     document.getElementById("showDate").checked = !!settings.showDate;
+    document.getElementById("uploadServer").checked = !!settings.uploadServer;
+    updateUploadInfo();
     var boxes = document.querySelectorAll("[data-tx]");
     for (var i = 0; i < boxes.length; i++) {
       boxes[i].checked = !!settings.tx[boxes[i].getAttribute("data-tx")];
@@ -818,6 +848,7 @@
     settings.size = getPill("grpSize") || settings.size;
     settings.clock = document.getElementById("showClock").checked;
     settings.showDate = document.getElementById("showDate").checked;
+    settings.uploadServer = document.getElementById("uploadServer").checked;
     var boxes = document.querySelectorAll("[data-tx]");
     for (var i = 0; i < boxes.length; i++) {
       settings.tx[boxes[i].getAttribute("data-tx")] = boxes[i].checked;
@@ -847,6 +878,7 @@
       });
     });
     document.getElementById("btnUpdate").onclick = checkUpdate;
+    document.getElementById("uploadServer").addEventListener("change", updateUploadInfo);
     document.getElementById("btnAddFolder").addEventListener("click", openBrowser);
     document.getElementById("browserCancel").addEventListener("click", closeBrowser);
     document.getElementById("browserAdd").addEventListener("click", browserAddCurrent);

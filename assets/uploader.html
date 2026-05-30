@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zpix uploader</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, system-ui, sans-serif;
+  margin: 0;
+  padding: 24px;
+  background: #15171f;
+  color: #e8e9ee;
+  min-height: 100vh;
+}
+.wrap { max-width: 620px; margin: 0 auto; }
+h1 { margin: 0 0 6px; font-size: 26px; }
+.sub { color: #aeb3c4; margin: 0 0 22px; }
+.drop {
+  border: 2px dashed #353a4a;
+  border-radius: 14px;
+  padding: 36px 20px;
+  text-align: center;
+  background: #1a1d28;
+  transition: border-color .15s, background .15s;
+}
+.drop.over { border-color: #6b7bff; background: #1d2438; }
+.drop p { margin: 0 0 12px; color: #aeb3c4; }
+.drop input[type=file] {
+  display: block;
+  margin: 8px auto 14px;
+  font-size: 14px;
+  color: #cfd3df;
+}
+.btn {
+  display: inline-block;
+  padding: 12px 22px;
+  background: #6b7bff;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:disabled { opacity: .45; cursor: default; }
+#out { margin-top: 16px; color: #aeb3c4; font-size: 14px; min-height: 1.2em; }
+.ok { color: #6bff8e; }
+.err { color: #ff6b6b; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>zpix uploader</h1>
+  <p class="sub">Drop photos here to send them to the frame. They will appear in the slideshow on the next restart.</p>
+  <div class="drop" id="drop">
+    <p>Tap to choose photos, or drag and drop here</p>
+    <input type="file" id="files" multiple accept="image/*">
+    <button class="btn" id="send" disabled>Send to frame</button>
+  </div>
+  <div id="out"></div>
+</div>
+<script>
+(function () {
+  var drop = document.getElementById("drop");
+  var inp = document.getElementById("files");
+  var btn = document.getElementById("send");
+  var out = document.getElementById("out");
+  var selected = [];
+
+  function update() {
+    btn.disabled = selected.length === 0;
+    btn.textContent = selected.length
+      ? "Send " + selected.length + " photo" + (selected.length === 1 ? "" : "s")
+      : "Send to frame";
+  }
+  inp.addEventListener("change", function () {
+    selected = Array.prototype.slice.call(inp.files);
+    update();
+  });
+  ["dragenter", "dragover"].forEach(function (e) {
+    drop.addEventListener(e, function (ev) { ev.preventDefault(); drop.classList.add("over"); });
+  });
+  ["dragleave", "drop"].forEach(function (e) {
+    drop.addEventListener(e, function (ev) { ev.preventDefault(); drop.classList.remove("over"); });
+  });
+  drop.addEventListener("drop", function (ev) {
+    selected = Array.prototype.slice.call(ev.dataTransfer.files).filter(function (f) {
+      return /^image\//i.test(f.type) || /\.(jpe?g|png|gif|webp|bmp)$/i.test(f.name);
+    });
+    update();
+  });
+
+  btn.addEventListener("click", function () {
+    if (!selected.length) return;
+    var fd = new FormData();
+    for (var i = 0; i < selected.length; i++) fd.append("file" + i, selected[i], selected[i].name);
+    btn.disabled = true;
+    out.textContent = "Uploading " + selected.length + " photos...";
+    out.className = "";
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "/upload");
+    xhr.onload = function () {
+      try {
+        var j = JSON.parse(xhr.responseText || "{}");
+        out.textContent = "Saved " + (j.saved || 0) + " photos. They'll appear on the next zpix restart.";
+        out.className = "ok";
+      } catch (e) {
+        out.textContent = "Upload finished (could not parse server response).";
+        out.className = "ok";
+      }
+      selected = []; inp.value = ""; update();
+    };
+    xhr.onerror = function () { out.textContent = "Upload failed."; out.className = "err"; btn.disabled = false; };
+    xhr.send(fd);
+  });
+})();
+</script>
+</body>
+</html>

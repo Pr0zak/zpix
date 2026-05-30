@@ -1,8 +1,10 @@
 package com.zand.frame;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
@@ -42,10 +44,13 @@ import javax.net.ssl.X509TrustManager;
 public class MainActivity extends Activity {
 
     private WebView web;
+    private UploadServer uploadServer;
 
     // Generic fallback folder; the app auto-picks the folder with the most
     // images on first run (see app.js), so this is only used if none are found.
     private static final String PHOTO_DIR = "/sdcard/Pictures";
+    private static final String UPLOAD_DIR = "/sdcard/zpix_uploads";
+    private static final int UPLOAD_PORT = 8080;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -218,6 +223,57 @@ public class MainActivity extends Activity {
                 if (n.startsWith(".") || n.equalsIgnoreCase("Android")) continue;
                 collectFolders(k, depth + 1, list);
             }
+        }
+
+        // Local in-app HTTP server for receiving uploaded photos (toggleable).
+        @JavascriptInterface
+        public boolean startUploadServer() {
+            if (uploadServer != null && uploadServer.isRunning()) return true;
+            try {
+                java.io.InputStream is = getAssets().open("uploader.html");
+                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[8192]; int n;
+                while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
+                is.close();
+                uploadServer = new UploadServer(UPLOAD_PORT,
+                        new File(UPLOAD_DIR), bos.toByteArray(),
+                        new Runnable() { public void run() {
+                            new File(UPLOAD_DIR).setReadable(true, false);
+                        }});
+                return uploadServer.start();
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public void stopUploadServer() {
+            if (uploadServer != null) { uploadServer.stop(); uploadServer = null; }
+        }
+
+        @JavascriptInterface
+        public boolean uploadServerRunning() {
+            return uploadServer != null && uploadServer.isRunning();
+        }
+
+        @JavascriptInterface
+        public String uploadServerUrl() {
+            String ip = wifiIp();
+            if (ip == null || ip.length() == 0) return "";
+            return "http://" + ip + ":" + UPLOAD_PORT;
+        }
+
+        @JavascriptInterface
+        public String uploadDir() { return UPLOAD_DIR; }
+
+        private String wifiIp() {
+            try {
+                WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                int ip = wm.getConnectionInfo().getIpAddress();
+                if (ip == 0) return null;
+                return String.format("%d.%d.%d.%d",
+                        ip & 0xff, (ip >> 8) & 0xff, (ip >> 16) & 0xff, (ip >> 24) & 0xff);
+            } catch (Exception e) { return null; }
         }
 
         // Browse a directory: returns the path, its parent (within /sdcard), the
