@@ -51,8 +51,9 @@
     <div class="sheet-body">
 
       <section>
-        <div class="lbl">Photo folder</div>
+        <div class="lbl">Photo folders</div>
         <div id="folderList" class="folders"></div>
+        <button id="btnAddFolder" class="btn ghost addbtn">+ Add folder</button>
       </section>
 
       <section>
@@ -131,6 +132,23 @@
     <div class="sheet-foot">
       <button id="btnClose" class="btn ghost">Close</button>
       <button id="btnSave" class="btn primary">Save &amp; restart</button>
+    </div>
+  </div>
+</div>
+
+<!-- Folder browser -->
+<div id="browser" class="hidden">
+  <div class="sheet">
+    <div class="sheet-head"><span>Add a folder</span></div>
+    <div class="browser-bar">
+      <span id="browserPath"></span>
+      <span id="browserImages" class="cnt"></span>
+    </div>
+    <div class="sheet-body" id="browserList"></div>
+    <div class="sheet-foot">
+      <button id="browserUp" class="btn ghost">Up</button>
+      <button id="browserCancel" class="btn ghost">Cancel</button>
+      <button id="browserAdd" class="btn primary">Add this folder</button>
     </div>
   </div>
 </div>

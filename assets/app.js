@@ -8,10 +8,11 @@
   var photos = [], order = [], cursor = 0;
   var currentScene = null, running = false, timer = null, clockTimer = null;
   var dSingle, dMosaic, dFloat, dGrid, bag, TS = 1;
-  var pendingFolder = null;
+  var pendingFolders = [];
+  var browserEl, browserPath = "/sdcard";
 
   var DEFAULTS = {
-    folder: "", dwell: 9, multi: 8, order: "random", fit: "contain", speed: "normal", size: "medium", clock: false,
+    folder: "", folders: [], dwell: 9, multi: 8, order: "random", fit: "contain", speed: "normal", size: "medium", clock: false,
     tx: { kenburns: true, fade: true, slide: true, mosaic: true, float: true, origami: true }
   };
   var WEIGHT = { kenburns: 3, fade: 2, slide: 1, mosaic: 2, float: 2, origami: 1 };
@@ -33,6 +34,9 @@
         }
       }
     } catch (e) { }
+    // migrate the old single-folder setting to the folders[] list
+    if ((!s.folders || !s.folders.length) && s.folder) s.folders = [s.folder];
+    if (!s.folders) s.folders = [];
     return s;
   }
   function saveSettings() {
@@ -360,21 +364,27 @@
     document.documentElement.style.setProperty("--photo-fit", settings.fit || "contain");
   }
   function loadPhotos() {
-    var folder = settings.folder;
     var nat = (settings.order === "date") ? "date" : "name";
-    try {
-      if (!folder) {
-        // first run: pick the folder with the most photos, and remember it
+    var folders = (settings.folders && settings.folders.length) ? settings.folders.slice() : [];
+    if (!folders.length) {
+      // first run: pick the folder with the most photos, and remember it
+      var pick = "";
+      try {
         if (window.Android && window.Android.getFolders) {
-          var folders = JSON.parse(window.Android.getFolders());
-          if (folders.length) folder = folders[0].path;
+          var fs = JSON.parse(window.Android.getFolders());
+          if (fs.length) pick = fs[0].path;
         }
-        if (!folder && window.Android && window.Android.defaultFolder) folder = window.Android.defaultFolder();
-        if (folder) { settings.folder = folder; saveSettings(); }
-      }
-      var json = (window.Android && window.Android.getPhotos) ? window.Android.getPhotos(folder, nat) : "[]";
-      photos = JSON.parse(json);
-    } catch (e) { photos = []; }
+      } catch (e) { }
+      if (!pick && window.Android && window.Android.defaultFolder) pick = window.Android.defaultFolder();
+      if (pick) { folders = [pick]; settings.folders = folders; saveSettings(); }
+    }
+    photos = [];
+    for (var i = 0; i < folders.length; i++) {
+      try {
+        var arr = JSON.parse(window.Android.getPhotos(folders[i], nat));
+        if (arr && arr.length) photos = photos.concat(arr);
+      } catch (e) { }
+    }
   }
   function stopShow() {
     running = false;
@@ -427,44 +437,69 @@
 
   // ---------- settings UI ----------
 
-  function buildFolderList() {
+  function relPath(p) {
+    if (!p) return "";
+    var r = p.replace("/storage/emulated/0", "").replace("/sdcard", "");
+    return r.replace(/^\/+/, "") || "(internal storage)";
+  }
+
+  // selected folders, each removable
+  function renderFolders() {
     var box = document.getElementById("folderList");
     box.innerHTML = "";
-    var folders = [];
-    try {
-      var j = (window.Android && window.Android.getFolders) ? window.Android.getFolders() : "[]";
-      folders = JSON.parse(j);
-    } catch (e) { folders = []; }
-
-    var active = pendingFolder;
-    if (!active) {
-      active = settings.folder;
-      if (!active && window.Android && window.Android.defaultFolder) active = window.Android.defaultFolder();
+    if (!pendingFolders.length) {
+      var em = document.createElement("div"); em.className = "about-row";
+      em.textContent = "No folders selected — add one below.";
+      box.appendChild(em);
+      return;
     }
-
-    folders.forEach(function (f) {
-      var row = document.createElement("div");
-      row.className = "folder" + (f.path === active ? " sel" : "");
-      var name = document.createElement("span"); name.textContent = f.name;
-      var cnt = document.createElement("span"); cnt.className = "cnt"; cnt.textContent = f.count + " photos";
-      row.appendChild(name); row.appendChild(cnt);
-      row.addEventListener("click", function () {
-        pendingFolder = f.path;
-        var all = box.getElementsByClassName("folder");
-        for (var i = 0; i < all.length; i++) all[i].classList.remove("sel");
-        row.classList.add("sel");
-      });
+    pendingFolders.forEach(function (p, idx) {
+      var row = document.createElement("div"); row.className = "folder";
+      var name = document.createElement("span"); name.textContent = relPath(p);
+      var cnt = document.createElement("span"); cnt.className = "cnt";
+      try { cnt.textContent = (JSON.parse(window.Android.listDir(p)).images || 0) + " photos"; } catch (e) { cnt.textContent = ""; }
+      var rm = document.createElement("button"); rm.className = "btn ghost rm"; rm.textContent = "Remove";
+      rm.addEventListener("click", function () { pendingFolders.splice(idx, 1); renderFolders(); });
+      row.appendChild(name); row.appendChild(cnt); row.appendChild(rm);
       box.appendChild(row);
     });
-    if (!folders.length) {
-      var em = document.createElement("div"); em.className = "about-row";
-      em.textContent = "No photo folders found under /sdcard.";
+  }
+
+  // filesystem browser to add any folder
+  function openBrowser() { browserPath = "/sdcard"; browserEl.classList.remove("hidden"); renderBrowser(); }
+  function closeBrowser() { browserEl.classList.add("hidden"); }
+  function renderBrowser() {
+    var data;
+    try { data = JSON.parse(window.Android.listDir(browserPath)); }
+    catch (e) { data = { path: browserPath, dirs: [], parent: "", images: 0 }; }
+    browserPath = data.path || browserPath;
+    document.getElementById("browserPath").textContent = "/" + relPath(browserPath);
+    document.getElementById("browserImages").textContent = (data.images || 0) + " photos here";
+    var up = document.getElementById("browserUp");
+    up.style.visibility = data.parent ? "visible" : "hidden";
+    up.onclick = function () { if (data.parent) { browserPath = data.parent; renderBrowser(); } };
+    var box = document.getElementById("browserList"); box.innerHTML = "";
+    (data.dirs || []).forEach(function (d) {
+      var row = document.createElement("div"); row.className = "folder nav";
+      var name = document.createElement("span"); name.textContent = d.name + "  ›";
+      var cnt = document.createElement("span"); cnt.className = "cnt"; cnt.textContent = d.images + " photos";
+      row.appendChild(name); row.appendChild(cnt);
+      row.addEventListener("click", function () { browserPath = d.path; renderBrowser(); });
+      box.appendChild(row);
+    });
+    if (!(data.dirs || []).length) {
+      var em = document.createElement("div"); em.className = "about-row"; em.textContent = "No subfolders here.";
       box.appendChild(em);
     }
   }
+  function browserAddCurrent() {
+    if (pendingFolders.indexOf(browserPath) === -1) pendingFolders.push(browserPath);
+    closeBrowser();
+    renderFolders();
+  }
 
   function openSettings() {
-    pendingFolder = null;
+    pendingFolders = (settings.folders || []).slice();
     document.getElementById("dwell").value = settings.dwell;
     document.getElementById("dwellVal").textContent = settings.dwell;
     document.getElementById("multi").value = settings.multi;
@@ -486,7 +521,7 @@
     ub.textContent = "Check for updates";
     ub.onclick = checkUpdate;
     document.getElementById("updStatus").textContent = "";
-    buildFolderList();
+    renderFolders();
     settingsEl.classList.remove("hidden");
   }
   function closeSettings() { settingsEl.classList.add("hidden"); }
@@ -566,7 +601,7 @@
     for (var i = 0; i < boxes.length; i++) {
       settings.tx[boxes[i].getAttribute("data-tx")] = boxes[i].checked;
     }
-    if (pendingFolder) settings.folder = pendingFolder;
+    settings.folders = pendingFolders.slice();
     saveSettings();
     closeSettings();
     startShow();
@@ -591,6 +626,10 @@
       });
     });
     document.getElementById("btnUpdate").onclick = checkUpdate;
+    document.getElementById("btnAddFolder").addEventListener("click", openBrowser);
+    document.getElementById("browserCancel").addEventListener("click", closeBrowser);
+    document.getElementById("browserAdd").addEventListener("click", browserAddCurrent);
+    browserEl.addEventListener("click", function (e) { if (e.target === browserEl) closeBrowser(); });
     document.getElementById("btnSave").addEventListener("click", saveAndRestart);
     document.getElementById("btnClose").addEventListener("click", closeSettings);
     settingsEl.addEventListener("click", function (e) {
@@ -612,6 +651,7 @@
     splash = document.getElementById("splash");
     clockEl = document.getElementById("clock");
     settingsEl = document.getElementById("settings");
+    browserEl = document.getElementById("browser");
 
     settings = loadSettings();
     wireUi();

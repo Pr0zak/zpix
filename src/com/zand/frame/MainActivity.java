@@ -220,6 +220,46 @@ public class MainActivity extends Activity {
             }
         }
 
+        // Browse a directory: returns the path, its parent (within /sdcard), the
+        // image count here, and its subfolders (with image counts) for a picker.
+        @JavascriptInterface
+        public String listDir(String path) {
+            JSONObject res = new JSONObject();
+            try {
+                if (path == null || path.length() == 0) path = "/sdcard";
+                File dir = new File(path);
+                String abs = dir.getAbsolutePath();
+                JSONArray dirs = new JSONArray();
+                File[] kids = dir.listFiles();
+                if (kids != null) {
+                    Arrays.sort(kids, new Comparator<File>() {
+                        public int compare(File a, File b) {
+                            return a.getName().compareToIgnoreCase(b.getName());
+                        }
+                    });
+                    for (File k : kids) {
+                        if (!k.isDirectory()) continue;
+                        String n = k.getName();
+                        if (n.startsWith(".") || n.equalsIgnoreCase("Android")) continue;
+                        JSONObject o = new JSONObject();
+                        o.put("name", n);
+                        o.put("path", k.getAbsolutePath());
+                        o.put("images", countImages(k));
+                        dirs.put(o);
+                    }
+                }
+                res.put("path", abs);
+                res.put("images", countImages(dir));
+                // don't allow browsing above /sdcard (or its real /storage/emulated/0)
+                boolean atRoot = abs.equals("/sdcard") || abs.equals("/storage/emulated/0")
+                        || abs.equals("/storage/emulated") || abs.equals("/storage");
+                File parent = dir.getParentFile();
+                res.put("parent", (!atRoot && parent != null) ? parent.getAbsolutePath() : "");
+                res.put("dirs", dirs);
+            } catch (Exception e) { }
+            return res.toString();
+        }
+
         // Download the APK natively (manual redirect following) and launch the
         // system installer. Logs each step to logcat tag "zpix" for diagnostics.
         @JavascriptInterface
