@@ -153,29 +153,67 @@ public class MainActivity extends Activity {
             JSONArray arr = new JSONArray();
             try {
                 if (path == null || path.length() == 0) path = PHOTO_DIR;
-                File dir = new File(path);
-                File[] files = dir.listFiles();
-                if (files != null) {
-                    final boolean byDate = "date".equals(order);
-                    Arrays.sort(files, new Comparator<File>() {
-                        public int compare(File a, File b) {
-                            if (byDate) {
-                                long d = a.lastModified() - b.lastModified(); // oldest -> newest
-                                if (d != 0) return d < 0 ? -1 : 1;
-                            }
-                            return a.getName().compareToIgnoreCase(b.getName());
+                File root = new File(path);
+                ArrayList<File> files = new ArrayList<File>();
+                collectImagesRecursive(root, files, 0);
+                final boolean byDate = "date".equals(order);
+                Collections.sort(files, new Comparator<File>() {
+                    public int compare(File a, File b) {
+                        if (byDate) {
+                            long d = a.lastModified() - b.lastModified();
+                            if (d != 0) return d < 0 ? -1 : 1;
                         }
-                    });
-                    String base = dir.getAbsolutePath();
-                    for (File f : files) {
-                        if (!f.isFile()) continue;
-                        if (isImage(f.getName())) {
-                            arr.put("file://" + base + "/" + Uri.encode(f.getName()));
-                        }
+                        // group by folder, then name
+                        return a.getAbsolutePath().compareToIgnoreCase(b.getAbsolutePath());
                     }
-                }
+                });
+                for (File f : files) arr.put(fileToUrl(f));
             } catch (Exception e) { }
             return arr.toString();
+        }
+
+        // Recursive image count (used by the selected-folder list).
+        @JavascriptInterface
+        public int countAllImages(String path) {
+            try {
+                if (path == null || path.length() == 0) return 0;
+                ArrayList<File> files = new ArrayList<File>();
+                collectImagesRecursive(new File(path), files, 0);
+                return files.size();
+            } catch (Exception e) { return 0; }
+        }
+
+        private void collectImagesRecursive(File dir, ArrayList<File> out, int depth) {
+            if (depth > 10 || dir == null) return;
+            File[] kids;
+            try { kids = dir.listFiles(); } catch (Exception e) { return; }
+            if (kids == null) return;
+            // sort kids so order is stable across runs
+            Arrays.sort(kids, new Comparator<File>() {
+                public int compare(File a, File b) {
+                    return a.getName().compareToIgnoreCase(b.getName());
+                }
+            });
+            for (File k : kids) {
+                if (k.isFile()) {
+                    if (isImage(k.getName())) out.add(k);
+                } else if (k.isDirectory()) {
+                    String n = k.getName();
+                    if (n.startsWith(".") || n.equalsIgnoreCase("Android")) continue;
+                    collectImagesRecursive(k, out, depth + 1);
+                }
+            }
+        }
+
+        private String fileToUrl(File f) {
+            String abs = f.getAbsolutePath();
+            String[] segs = abs.split("/");
+            StringBuilder sb = new StringBuilder("file://");
+            for (String s : segs) {
+                if (s.length() == 0) continue;
+                sb.append('/').append(Uri.encode(s));
+            }
+            return sb.toString();
         }
 
         // Folders under /sdcard (and one level of subfolders) that contain
@@ -269,6 +307,15 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String uploadDir() { return UPLOAD_DIR; }
 
+        @JavascriptInterface
+        public boolean getAutoStart() {
+            return getSharedPreferences("zpix", MODE_PRIVATE).getBoolean("autoStart", true);
+        }
+        @JavascriptInterface
+        public void setAutoStart(boolean v) {
+            getSharedPreferences("zpix", MODE_PRIVATE).edit().putBoolean("autoStart", v).apply();
+        }
+
         private String storageInfoJson() {
             try {
                 File dir = new File(UPLOAD_DIR);
@@ -284,19 +331,25 @@ public class MainActivity extends Activity {
                     total = (long) sf.getBlockCount() * bs;
                     free = (long) sf.getAvailableBlocks() * bs;
                 }
-                int uploads = 0;
-                long uploadsBytes = 0;
-                File[] kids = dir.listFiles();
-                if (kids != null) for (File f : kids) {
-                    if (f.isFile()) { uploads++; uploadsBytes += f.length(); }
-                }
+                long[] tally = new long[]{ 0, 0 }; // count, bytes
+                tallyTree(dir, tally, 0);
                 return "{\"total\":" + total +
                        ",\"free\":" + free +
                        ",\"used\":" + (total - free) +
-                       ",\"uploads\":" + uploads +
-                       ",\"uploadsBytes\":" + uploadsBytes + "}";
+                       ",\"uploads\":" + tally[0] +
+                       ",\"uploadsBytes\":" + tally[1] + "}";
             } catch (Exception e) {
                 return "{}";
+            }
+        }
+        private void tallyTree(File dir, long[] tally, int depth) {
+            if (depth > 12 || dir == null) return;
+            File[] kids;
+            try { kids = dir.listFiles(); } catch (Exception e) { return; }
+            if (kids == null) return;
+            for (File k : kids) {
+                if (k.isFile()) { tally[0]++; tally[1] += k.length(); }
+                else if (k.isDirectory()) tallyTree(k, tally, depth + 1);
             }
         }
 

@@ -449,7 +449,8 @@ h1 { margin: 0 0 6px; font-size: 26px; }
       xhr.onerror = function () { setStatus(it, "failed", "Network error", 0); resolve(); };
       xhr.onabort = function () { setStatus(it, "cancelled", "Cancelled", 0); resolve(); };
       var fd = new FormData();
-      fd.append("file", it.file, it.file.name);
+      var sendName = it.relPath || it.file.name;
+      fd.append("file", it.file, sendName);
       try { xhr.send(fd); } catch (e) { setStatus(it, "failed", "Send failed", 0); resolve(); }
     });
   }

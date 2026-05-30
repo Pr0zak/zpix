@@ -209,7 +209,7 @@
 
   function tOrigami(items) {
     var s = newScene();
-    var cols = 6, rows = 4;
+    var cols = 4, rows = 3;
     var layout = buildVariedTiles(cols, rows);
     var grid = document.createElement("div"); grid.className = "ogrid";
     grid.style.gridTemplateColumns = "repeat(" + cols + ",1fr)";
@@ -704,7 +704,10 @@
       var row = document.createElement("div"); row.className = "folder";
       var name = document.createElement("span"); name.textContent = relPath(p);
       var cnt = document.createElement("span"); cnt.className = "cnt";
-      try { cnt.textContent = (JSON.parse(window.Android.listDir(p)).images || 0) + " photos"; } catch (e) { cnt.textContent = ""; }
+      try {
+        var n = (window.Android && window.Android.countAllImages) ? window.Android.countAllImages(p) : (JSON.parse(window.Android.listDir(p)).images || 0);
+        cnt.textContent = n + " photos";
+      } catch (e) { cnt.textContent = ""; }
       var rm = document.createElement("button"); rm.className = "btn ghost rm"; rm.textContent = "Remove";
       rm.addEventListener("click", function () { pendingFolders.splice(idx, 1); renderFolders(); });
       row.appendChild(name); row.appendChild(cnt); row.appendChild(rm);
@@ -758,6 +761,8 @@
     document.getElementById("showClock").checked = !!settings.clock;
     document.getElementById("showDate").checked = !!settings.showDate;
     document.getElementById("uploadServer").checked = !!settings.uploadServer;
+    var asCb = document.getElementById("autoStart");
+    if (asCb && window.Android && window.Android.getAutoStart) asCb.checked = !!window.Android.getAutoStart();
     updateUploadInfo();
     var boxes = document.querySelectorAll("[data-tx]");
     for (var i = 0; i < boxes.length; i++) {
@@ -849,6 +854,9 @@
     settings.clock = document.getElementById("showClock").checked;
     settings.showDate = document.getElementById("showDate").checked;
     settings.uploadServer = document.getElementById("uploadServer").checked;
+    if (window.Android && window.Android.setAutoStart) {
+      window.Android.setAutoStart(document.getElementById("autoStart").checked);
+    }
     var boxes = document.querySelectorAll("[data-tx]");
     for (var i = 0; i < boxes.length; i++) {
       settings.tx[boxes[i].getAttribute("data-tx")] = boxes[i].checked;

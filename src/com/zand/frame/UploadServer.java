@@ -162,8 +162,16 @@ public class UploadServer {
             File outFile = null;
             OutputStream fout;
             if (filename != null) {
-                outFile = new File(uploadDir, uniqueName(sanitize(filename)));
-                fout = new BufferedOutputStream(new FileOutputStream(outFile), 16384);
+                String rel = sanitizeRelPath(filename);
+                if (rel != null) {
+                    File target = new File(uploadDir, rel);
+                    File parent = target.getParentFile();
+                    if (parent != null) parent.mkdirs();
+                    outFile = uniqueFile(target);
+                    fout = new BufferedOutputStream(new FileOutputStream(outFile), 16384);
+                } else {
+                    fout = new ByteArrayOutputStream();
+                }
             } else {
                 fout = new ByteArrayOutputStream(); // form field, drop it
             }
@@ -232,31 +240,48 @@ public class UploadServer {
         return end < 0 ? rest.trim() : rest.substring(0, end).trim();
     }
 
-    private static String sanitize(String name) {
-        int slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
-        if (slash >= 0) name = name.substring(slash + 1);
+    private static String sanitizeComponent(String c) {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < name.length(); i++) {
-            char ch = name.charAt(i);
+        for (int i = 0; i < c.length(); i++) {
+            char ch = c.charAt(i);
             boolean ok = ch == '.' || ch == '-' || ch == '_' || ch == ' '
                     || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9');
             sb.append(ok ? ch : '_');
         }
-        String safe = sb.toString().trim();
-        return safe.length() > 0 ? safe : "photo.jpg";
+        return sb.toString().trim();
     }
 
-    private String uniqueName(String name) {
-        File f = new File(uploadDir, name);
-        if (!f.exists()) return name;
+    // Sanitize a multipart filename that may include a relative path
+    // ("vacation/IMG_001.jpg"). Each component is cleaned, "." / ".." are
+    // dropped to prevent escaping uploadDir.
+    private static String sanitizeRelPath(String name) {
+        String[] segs = name.replace('\\', '/').split("/");
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < segs.length; i++) {
+            String s = segs[i].trim();
+            if (s.length() == 0 || s.equals(".") || s.equals("..")) continue;
+            String safe = sanitizeComponent(s);
+            if (safe.length() == 0) continue;
+            if (out.length() > 0) out.append('/');
+            out.append(safe);
+        }
+        if (out.length() == 0) return "photo.jpg";
+        // last segment is the file name; if it has no extension just leave it as-is
+        return out.toString();
+    }
+
+    private File uniqueFile(File target) {
+        if (!target.exists()) return target;
+        String name = target.getName();
+        File parent = target.getParentFile();
         int dot = name.lastIndexOf('.');
         String base = dot >= 0 ? name.substring(0, dot) : name;
         String ext = dot >= 0 ? name.substring(dot) : "";
         for (int i = 1; i < 100000; i++) {
-            String alt = base + "_" + i + ext;
-            if (!new File(uploadDir, alt).exists()) return alt;
+            File alt = new File(parent, base + "_" + i + ext);
+            if (!alt.exists()) return alt;
         }
-        return name;
+        return target;
     }
 
     private static String readLine(InputStream in) throws IOException {
