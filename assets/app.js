@@ -725,7 +725,7 @@
     selectPill("grpFit", settings.fit);
     selectPill("grpSpeed", settings.speed);
     selectPill("grpSize", settings.size);
-    document.getElementById("clock").checked = !!settings.clock;
+    document.getElementById("showClock").checked = !!settings.clock;
     document.getElementById("showDate").checked = !!settings.showDate;
     var boxes = document.querySelectorAll("[data-tx]");
     for (var i = 0; i < boxes.length; i++) {
@@ -814,7 +814,7 @@
     settings.fit = getPill("grpFit") || settings.fit;
     settings.speed = getPill("grpSpeed") || settings.speed;
     settings.size = getPill("grpSize") || settings.size;
-    settings.clock = document.getElementById("clock").checked;
+    settings.clock = document.getElementById("showClock").checked;
     settings.showDate = document.getElementById("showDate").checked;
     var boxes = document.querySelectorAll("[data-tx]");
     for (var i = 0; i < boxes.length; i++) {
