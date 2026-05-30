@@ -40,9 +40,11 @@
         }
       }
     } catch (e) { }
-    // migrate the old single-folder setting to the folders[] list
+    // migrate the old single-folder setting to the folders[] list, then drop
+    // it so the obsolete value can't show up in messages later
     if ((!s.folders || !s.folders.length) && s.folder) s.folders = [s.folder];
     if (!s.folders) s.folders = [];
+    s.folder = "";
     return s;
   }
   function saveSettings() {
@@ -642,7 +644,15 @@
     bag = buildBag();
     applyClock();
     if (!photos.length) {
-      msg.textContent = "No photos found in " + (settings.folder || "default folder");
+      var where;
+      if (settings.folders && settings.folders.length) {
+        where = settings.folders.map(function (p) {
+          return p.replace("/storage/emulated/0/", "").replace("/sdcard/", "") || "/";
+        }).join(", ");
+      } else {
+        where = "(no folders selected — tap the screen to open Settings and add one)";
+      }
+      msg.textContent = "No photos found in " + where;
       msg.style.display = "block";
       return;
     }
