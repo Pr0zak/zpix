@@ -330,3 +330,119 @@ input[type=range] { width: 100%; height: 5vh; }
   height: 100%;
   object-fit: cover;
 }
+
+/* ---- polaroid stack ---- */
+.pstack {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 45%, #1f2128, #0c0d11 80%);
+}
+.polaroid {
+  position: absolute;
+  width: 56vh;
+  padding: 1.6vh 1.6vh 5vh;
+  background: #fafafa;
+  border-radius: .6vh;
+  box-shadow: 0 1.8vh 4vh rgba(0, 0, 0, .6);
+  will-change: transform, opacity;
+}
+.polaroid img {
+  display: block;
+  width: 100%;
+  height: 56vh;
+  object-fit: cover;
+  background: #000;
+}
+
+/* ---- magazine layout ---- */
+.magpage {
+  position: absolute;
+  left: 7vh;
+  right: 7vh;
+  top: 5vh;
+  bottom: 10vh;
+  background: #fff;
+  padding: 2vh;
+  box-shadow: 0 1.6vh 4vh rgba(0,0,0,.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.magimg {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  will-change: transform;
+}
+.magcap {
+  position: absolute;
+  bottom: 2.4vh;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: #aab;
+  font-family: sans-serif;
+  font-size: 2.3vh;
+  letter-spacing: .35em;
+  text-transform: uppercase;
+}
+
+/* ---- filmstrip scroll ---- */
+.filmstrip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  display: flex;
+  gap: 0.6vh;
+  padding: 6vh 0;
+  align-items: center;
+  will-change: transform;
+}
+.filmstrip::before, .filmstrip::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: -100vw;
+  height: 5vh;
+  background:
+    radial-gradient(circle at 1.5vh 50%, #fafafa 0.7vh, transparent 0.8vh) repeat-x 0 50% / 3vh 2vh,
+    #0b0b0b;
+}
+.filmstrip::before { top: 0; }
+.filmstrip::after { bottom: 0; }
+.fcell {
+  flex: 0 0 auto;
+  height: 70vh;
+  width: 50vh;
+  overflow: hidden;
+  background: #000;
+  border: .4vh solid #f7f5ef;
+  border-radius: .3vh;
+  box-shadow: 0 1.2vh 2.6vh rgba(0,0,0,.55);
+}
+.fcell img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* ---- reveal blinds ---- */
+.blinds {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+.blind {
+  position: absolute;
+  background: #000;
+  will-change: transform;
+}
+
+/* ---- cube turn ---- */
+.cube-face {
+  backface-visibility: hidden;
+  will-change: transform;
+}

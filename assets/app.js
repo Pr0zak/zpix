@@ -13,9 +13,15 @@
 
   var DEFAULTS = {
     folder: "", folders: [], dwell: 9, multi: 8, order: "random", fit: "contain", speed: "normal", size: "medium", clock: false, showDate: false,
-    tx: { kenburns: true, fade: true, slide: true, mosaic: true, float: true, origami: true }
+    tx: {
+      kenburns: true, fade: true, slide: true, mosaic: true, float: true, origami: true,
+      polaroid: true, magazine: true, filmstrip: true, blinds: true, cube: true
+    }
   };
-  var WEIGHT = { kenburns: 3, fade: 2, slide: 1, mosaic: 2, float: 2, origami: 1 };
+  var WEIGHT = {
+    kenburns: 3, fade: 2, slide: 1, mosaic: 2, float: 2, origami: 1,
+    polaroid: 1, magazine: 2, filmstrip: 1, blinds: 1, cube: 1
+  };
   var SPEEDS = { slow: 1.8, normal: 1.0, fast: 0.5 };
   var SIZES = { small: 0.34, medium: 0.46, large: 0.60 }; // floating card height as fraction of screen
   var settings = null;
@@ -122,9 +128,11 @@
   }
   function tKenBurns(url) {
     var s = newScene();
-    var img = document.createElement("img"); img.className = "kb"; img.src = url;
+    addBg(s, url); // blurred backdrop fills the screen behind a contained photo
+    var img = document.createElement("img"); img.className = "photo"; img.src = url;
     s.appendChild(img); s.classList.add("fade-enter"); mountAbove(s);
-    var z0 = 1.06, z1 = 1.20, dx = rand(-3, 3), dy = rand(-3, 3);
+    // start at native size, slow gentle zoom + small pan — keeps the whole photo visible
+    var z0 = 1.00, z1 = 1.07, dx = rand(-1.8, 1.8), dy = rand(-1.8, 1.8);
     img.style.transform = "scale(" + z0 + ") translate(0%,0%)";
     void s.offsetWidth; s.classList.remove("fade-enter"); s.classList.add("fade-in");
     img.style.transition = "transform " + (dSingle + 1600) + "ms linear";
@@ -336,6 +344,150 @@
     return s;
   }
 
+  // ---------- polaroid stack ----------
+
+  function makePolaroidCard(url) {
+    var c = document.createElement("div"); c.className = "polaroid";
+    var img = document.createElement("img"); img.src = url; c.appendChild(img);
+    var tilt = rand(-7, 7), dx = rand(-30, 30), dy = rand(-30, 30);
+    c.style.transform = "translate(" + dx + "px," + dy + "px) rotate(" + tilt + "deg)";
+    return c;
+  }
+  function tPolaroid(items) {
+    var s = newScene();
+    var stack = document.createElement("div"); stack.className = "pstack";
+    items.slice(0, 5).forEach(function (it) { stack.appendChild(makePolaroidCard(it.url)); });
+    s.appendChild(stack);
+    s.classList.add("fade-enter"); mountAbove(s); void s.offsetWidth;
+    s.classList.remove("fade-enter"); s.classList.add("fade-in");
+
+    s._oflip = setInterval(function () {
+      if (!running || !s.parentNode) return;
+      var top = stack.lastElementChild;
+      if (!top) return;
+      var dirX = (Math.random() < 0.5 ? -1 : 1) * (window.innerWidth + 200);
+      var dirRot = rand(-30, 30);
+      top.style.transition = "transform 800ms cubic-bezier(.4,.1,.2,1), opacity 800ms ease";
+      top.style.transform = "translate(" + dirX + "px,0) rotate(" + dirRot + "deg)";
+      top.style.opacity = "0";
+      setTimeout(function () {
+        if (top.parentNode) top.parentNode.removeChild(top);
+        var nu = nextUrl();
+        preloadFull(nu).then(function (it) {
+          if (!it.ok || !s.parentNode) return;
+          var c = makePolaroidCard(nu);
+          if (stack.firstChild) stack.insertBefore(c, stack.firstChild);
+          else stack.appendChild(c);
+        });
+      }, 850);
+    }, Math.round(3200 * TS));
+    return s;
+  }
+
+  // ---------- magazine layout (clean white frame + caption) ----------
+
+  function tMagazine(url) {
+    var s = newScene();
+    s.style.background = "#161618";
+    var page = document.createElement("div"); page.className = "magpage";
+    var img = document.createElement("img"); img.src = url; img.className = "magimg";
+    page.appendChild(img);
+    s.appendChild(page);
+    var cap = document.createElement("div"); cap.className = "magcap";
+    var d = new Date();
+    cap.textContent = DAYS[d.getDay()] + ", " + MONTHS[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+    s.appendChild(cap);
+    s.classList.add("fade-enter"); mountAbove(s); void s.offsetWidth;
+    s.classList.remove("fade-enter"); s.classList.add("fade-in");
+    // subtle slow zoom on the inner photo
+    void img.offsetWidth;
+    img.style.transition = "transform " + (dSingle + 1500) + "ms linear";
+    img.style.transform = "scale(1.05) translate(" + rand(-2, 2) + "%," + rand(-2, 2) + "%)";
+    return s;
+  }
+
+  // ---------- filmstrip scroll ----------
+
+  function tFilmstrip(items) {
+    var s = newScene();
+    s.style.background = "#000";
+    var strip = document.createElement("div"); strip.className = "filmstrip";
+    items.forEach(function (it) {
+      var cell = document.createElement("div"); cell.className = "fcell";
+      var img = document.createElement("img"); img.src = it.url; cell.appendChild(img);
+      strip.appendChild(cell);
+    });
+    s.appendChild(strip);
+    s.classList.add("fade-enter"); mountAbove(s); void s.offsetWidth;
+    s.classList.remove("fade-enter"); s.classList.add("fade-in");
+
+    // measure and animate
+    requestAnimationFrame(function () {
+      var totalW = strip.scrollWidth;
+      var vw = window.innerWidth;
+      var travel = totalW - vw + Math.round(window.innerHeight * 0.4);
+      if (travel < vw * 0.4) travel = vw * 0.4;
+      strip.style.transform = "translateX(" + Math.round(window.innerHeight * 0.2) + "px)";
+      void strip.offsetWidth;
+      strip.style.transition = "transform " + dFloat + "ms linear";
+      strip.style.transform = "translateX(" + (-travel) + "px)";
+    });
+    return s;
+  }
+
+  // ---------- reveal blinds ----------
+
+  function tBlinds(url) {
+    var s = newScene(); addBg(s, url);
+    var img = document.createElement("img"); img.className = "photo"; img.src = url;
+    s.appendChild(img);
+    var strips = document.createElement("div"); strips.className = "blinds";
+    var horizontal = Math.random() < 0.5;
+    var N = 8;
+    for (var i = 0; i < N; i++) {
+      var b = document.createElement("div"); b.className = "blind";
+      if (horizontal) {
+        b.style.top = (i * 100 / N) + "%";
+        b.style.height = (100 / N + 0.4) + "%";
+        b.style.left = "0";
+        b.style.right = "0";
+        b.style.transformOrigin = ((i % 2 === 0) ? "left" : "right") + " center";
+      } else {
+        b.style.left = (i * 100 / N) + "%";
+        b.style.width = (100 / N + 0.4) + "%";
+        b.style.top = "0";
+        b.style.bottom = "0";
+        b.style.transformOrigin = "center " + ((i % 2 === 0) ? "top" : "bottom");
+      }
+      strips.appendChild(b);
+    }
+    s.appendChild(strips);
+    mountAbove(s); void s.offsetWidth;
+    Array.prototype.slice.call(strips.children).forEach(function (b, i) {
+      var d = 650 * TS;
+      b.style.transition = "transform " + d + "ms cubic-bezier(.4,.1,.2,1) " + Math.round(i * 70 * TS) + "ms";
+      b.style.transform = horizontal ? "scaleX(0)" : "scaleY(0)";
+    });
+    return s;
+  }
+
+  // ---------- cube turn (3D swing-in) ----------
+
+  function tCube(url) {
+    var s = newScene();
+    s.style.perspective = "1500px";
+    addBg(s, url);
+    var img = document.createElement("img"); img.className = "photo cube-face"; img.src = url;
+    s.appendChild(img);
+    var sign = Math.random() < 0.5 ? 1 : -1;
+    img.style.transformOrigin = (sign > 0 ? "left" : "right") + " center";
+    img.style.transform = "rotateY(" + (sign * 92) + "deg)";
+    mountAbove(s); void s.offsetWidth;
+    img.style.transition = "transform " + Math.round(1200 * TS) + "ms cubic-bezier(.5,.1,.3,1)";
+    img.style.transform = "rotateY(0deg)";
+    return s;
+  }
+
   // ---------- scheduler ----------
 
   function buildBag() {
@@ -353,9 +505,13 @@
     var type = chooseType();
     var w = window.innerWidth;
 
-    if (type === "mosaic" || type === "float" || type === "origami") {
+    var multi = (type === "mosaic" || type === "float" || type === "origami"
+              || type === "polaroid" || type === "filmstrip");
+    if (multi) {
       var count = (type === "float") ? clamp(Math.round(settings.multi * 0.75), 3, 12)
                 : (type === "origami") ? 12
+                : (type === "polaroid") ? 5
+                : (type === "filmstrip") ? 8
                 : clamp(settings.multi, 2, 20);
       var urls = nextUrls(count);
       Promise.all(urls.map(preloadFull)).then(function (items) {
@@ -365,10 +521,15 @@
         var prev = currentScene;
         var sc = (type === "float") ? tFloat(items)
                : (type === "origami") ? tOrigami(items)
+               : (type === "polaroid") ? tPolaroid(items)
+               : (type === "filmstrip") ? tFilmstrip(items)
                : tMosaic(items);
         currentScene = sc;
         setTimeout(function () { retire(prev); }, 2000);
-        timer = setTimeout(step, (type === "float") ? dFloat : (type === "origami") ? dGrid : dMosaic);
+        var dwell = (type === "float" || type === "filmstrip") ? dFloat
+                  : (type === "origami" || type === "polaroid") ? dGrid
+                  : dMosaic;
+        timer = setTimeout(step, dwell);
       });
       return;
     }
@@ -380,6 +541,9 @@
       var prev = currentScene, sc;
       if (type === "kenburns") sc = tKenBurns(url);
       else if (type === "slide") sc = tSlide(url);
+      else if (type === "magazine") sc = tMagazine(url);
+      else if (type === "blinds") sc = tBlinds(url);
+      else if (type === "cube") sc = tCube(url);
       else sc = tFade(url);
       currentScene = sc;
       setTimeout(function () { retire(prev); }, 1800);
