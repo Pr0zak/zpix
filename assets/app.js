@@ -12,7 +12,7 @@
   var browserEl, browserPath = "/sdcard";
 
   var DEFAULTS = {
-    folder: "", folders: [], dwell: 9, multi: 8, order: "random", fit: "contain", speed: "normal", size: "medium", clock: false,
+    folder: "", folders: [], dwell: 9, multi: 8, order: "random", fit: "contain", speed: "normal", size: "medium", clock: false, showDate: false,
     tx: { kenburns: true, fade: true, slide: true, mosaic: true, float: true, origami: true }
   };
   var WEIGHT = { kenburns: 3, fade: 2, slide: 1, mosaic: 2, float: 2, origami: 1 };
@@ -134,15 +134,29 @@
   function tSlide(url) {
     var s = newScene(); addBg(s, url);
     var img = document.createElement("img"); img.className = "photo"; img.src = url;
-    s.appendChild(img); s.classList.add("slide-enter"); mountAbove(s);
-    void s.offsetWidth; s.classList.remove("slide-enter"); s.classList.add("slide-in");
-    if (currentScene) currentScene.classList.add("slide-out-left");
+    s.appendChild(img);
+    // slide in from a random direction (left/right/top/bottom)
+    var dirs = [
+      { axis: "X", from: "100%",  exit: "-100%" },
+      { axis: "X", from: "-100%", exit: "100%"  },
+      { axis: "Y", from: "100%",  exit: "-100%" },
+      { axis: "Y", from: "-100%", exit: "100%"  }
+    ];
+    var d = dirs[Math.floor(Math.random() * dirs.length)];
+    s.style.transform = "translate" + d.axis + "(" + d.from + ")";
+    mountAbove(s); void s.offsetWidth;
+    s.style.transition = "transform var(--t-slide) cubic-bezier(.7,0,.2,1)";
+    s.style.transform = "translate" + d.axis + "(0)";
+    if (currentScene) {
+      currentScene.style.transition = "transform var(--t-slide) cubic-bezier(.7,0,.2,1)";
+      currentScene.style.transform = "translate" + d.axis + "(" + d.exit + ")";
+    }
     return s;
   }
   // Apple-style "Origami": a grid wall whose tiles periodically fold over to
   // reveal different photos, holding the grid a while before the scene changes.
   function foldTile(cell, img, newUrl) {
-    var dur = 360 * TS;
+    var dur = 600 * TS;
     var a1 = cell.animate(
       [{ transform: "perspective(900px) rotateX(0deg)" },
        { transform: "perspective(900px) rotateX(-90deg)" }],
@@ -156,28 +170,57 @@
     };
   }
 
-  function tOrigami(items) {
-    var s = newScene();
-    var vw = window.innerWidth, vh = window.innerHeight;
-    var cols = 4, rows = 3;
-    var cellW = vw / cols, cellH = vh / rows;
-    var grid = document.createElement("div"); grid.className = "ogrid";
-    var tiles = [], pi = 0;
+  // Build a varied-size tile layout over a 6x4 CSS grid by greedy filling
+  // empty cells with random sizes (1x1, 2x1, 1x2, 2x2) that fit.
+  function buildVariedTiles(cols, rows) {
+    var occ = []; for (var r = 0; r < rows; r++) occ.push(new Array(cols).fill(false));
+    var out = [];
+    function fits(c, r, w, h) {
+      if (c + w > cols || r + h > rows) return false;
+      for (var dr = 0; dr < h; dr++) for (var dc = 0; dc < w; dc++) if (occ[r + dr][c + dc]) return false;
+      return true;
+    }
+    function place(c, r, w, h) {
+      for (var dr = 0; dr < h; dr++) for (var dc = 0; dc < w; dc++) occ[r + dr][c + dc] = true;
+      out.push({ col: c + 1, row: r + 1, cs: w, rs: h });
+    }
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
-        var cell = document.createElement("div"); cell.className = "ocell";
-        cell.style.left = (c * cellW) + "px"; cell.style.top = (r * cellH) + "px";
-        cell.style.width = Math.ceil(cellW) + "px"; cell.style.height = Math.ceil(cellH) + "px";
-        var img = document.createElement("img"); img.src = items[pi % items.length].url; pi++;
-        cell.appendChild(img); grid.appendChild(cell);
-        tiles.push({ el: cell, img: img });
+        if (occ[r][c]) continue;
+        var sizes = shuffle([[2, 2], [2, 1], [1, 2], [2, 1], [1, 1], [1, 1], [1, 1], [1, 1]]);
+        var placed = false;
+        for (var i = 0; i < sizes.length; i++) {
+          var w = sizes[i][0], h = sizes[i][1];
+          if (fits(c, r, w, h)) { place(c, r, w, h); placed = true; break; }
+        }
+        if (!placed) place(c, r, 1, 1);
       }
     }
+    return out;
+  }
+
+  function tOrigami(items) {
+    var s = newScene();
+    var cols = 6, rows = 4;
+    var layout = buildVariedTiles(cols, rows);
+    var grid = document.createElement("div"); grid.className = "ogrid";
+    grid.style.gridTemplateColumns = "repeat(" + cols + ",1fr)";
+    grid.style.gridTemplateRows = "repeat(" + rows + ",1fr)";
+
+    var tiles = [], pi = 0;
+    layout.forEach(function (t) {
+      var cell = document.createElement("div"); cell.className = "ocell";
+      cell.style.gridColumn = t.col + " / span " + t.cs;
+      cell.style.gridRow = t.row + " / span " + t.rs;
+      var img = document.createElement("img"); img.src = items[pi % items.length].url; pi++;
+      cell.appendChild(img); grid.appendChild(cell);
+      tiles.push({ el: cell, img: img });
+    });
     s.appendChild(grid);
     s.classList.add("fade-enter"); mountAbove(s); void s.offsetWidth;
     s.classList.remove("fade-enter"); s.classList.add("fade-in");
 
-    // periodically fold a random tile to a fresh photo
+    // calm pacing — fold one random tile every few seconds, not constantly
     s._oflip = setInterval(function () {
       if (!running || !s.parentNode) return;
       var t = tiles[Math.floor(Math.random() * tiles.length)];
@@ -185,7 +228,7 @@
       preloadFull(nu).then(function (it) {
         if (it.ok && s.parentNode) foldTile(t.el, t.img, nu);
       });
-    }, Math.round(2000 * TS));
+    }, Math.round(4500 * TS));
     return s;
   }
 
@@ -198,7 +241,7 @@
     var W = vw - pad * 2, avail = vh - pad * 2;
     var avgR = 1.3;
     var targetH = Math.sqrt((W * avail) / (avgR * items.length));
-    targetH = clamp(targetH, vh * 0.17, vh * 0.40);
+    targetH = clamp(targetH, vh * 0.26, vh * 0.55);
 
     var rows = [], cur = [], sumR = 0;
     for (var i = 0; i < items.length; i++) {
@@ -417,15 +460,25 @@
 
   // ---------- clock ----------
 
+  var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   function tickClock() {
     var d = new Date();
-    var h = d.getHours(), m = d.getMinutes();
-    var ap = h >= 12 ? "PM" : "AM";
-    var hh = h % 12; if (hh === 0) hh = 12;
-    clockEl.textContent = hh + ":" + (m < 10 ? "0" + m : m) + " " + ap;
+    var time = "";
+    if (settings.clock) {
+      var h = d.getHours(), m = d.getMinutes();
+      var ap = h >= 12 ? "PM" : "AM";
+      var hh = h % 12; if (hh === 0) hh = 12;
+      time = hh + ":" + (m < 10 ? "0" + m : m) + " " + ap;
+    }
+    var date = "";
+    if (settings.showDate) {
+      date = DAYS[d.getDay()] + ", " + MONTHS[d.getMonth()] + " " + d.getDate();
+    }
+    clockEl.textContent = (date && time) ? (date + " · " + time) : (date || time);
   }
   function applyClock() {
-    if (settings.clock) {
+    if (settings.clock || settings.showDate) {
       clockEl.classList.remove("hidden");
       tickClock();
       if (!clockTimer) clockTimer = setInterval(tickClock, 10000);
@@ -509,6 +562,7 @@
     selectPill("grpSpeed", settings.speed);
     selectPill("grpSize", settings.size);
     document.getElementById("clock").checked = !!settings.clock;
+    document.getElementById("showDate").checked = !!settings.showDate;
     var boxes = document.querySelectorAll("[data-tx]");
     for (var i = 0; i < boxes.length; i++) {
       boxes[i].checked = !!settings.tx[boxes[i].getAttribute("data-tx")];
@@ -597,6 +651,7 @@
     settings.speed = getPill("grpSpeed") || settings.speed;
     settings.size = getPill("grpSize") || settings.size;
     settings.clock = document.getElementById("clock").checked;
+    settings.showDate = document.getElementById("showDate").checked;
     var boxes = document.querySelectorAll("[data-tx]");
     for (var i = 0; i < boxes.length; i++) {
       settings.tx[boxes[i].getAttribute("data-tx")] = boxes[i].checked;
