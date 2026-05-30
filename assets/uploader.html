@@ -47,9 +47,24 @@ h1 { margin: 0 0 6px; font-size: 26px; }
 .btn.ghost { background: #262a36; color: #cfd3df; }
 .btn:disabled { opacity: .45; cursor: default; }
 
-#overall { margin-top: 18px; color: #aeb3c4; font-size: 14px; }
-#overall .bar { height: 6px; background: #2a2e3a; border-radius: 3px; overflow: hidden; margin-top: 8px; }
-#overall .bar > div { height: 100%; background: #6b7bff; width: 0; transition: width .25s; }
+#summary {
+  margin-top: 18px;
+  background: #1a1d28;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: none;
+}
+#summary.on { display: block; }
+#summary .head { display: flex; gap: 14px; flex-wrap: wrap; font-size: 14px; color: #cfd3df; }
+#summary .head b { color: #fff; }
+#summary .head .ok { color: #6bff8e; }
+#summary .head .bad { color: #ff6b6b; }
+#summary .head .dim { color: #6f7a93; }
+#summary .bar { height: 8px; background: #2a2e3a; border-radius: 4px; overflow: hidden; margin-top: 10px; }
+#summary .bar > div { height: 100%; background: #6b7bff; width: 0; transition: width .25s; }
+#summary .current { margin-top: 10px; font-size: 13px; color: #aeb3c4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#summary .current b { color: #e8e9ee; }
+#summary .toggle { margin-top: 8px; font-size: 13px; color: #8ea2ff; cursor: pointer; user-select: none; }
 
 .queue { margin-top: 16px; }
 .qrow {
@@ -85,6 +100,14 @@ h1 { margin: 0 0 6px; font-size: 26px; }
 .qrow.done   { background: #1b2a1c; }
 .qrow.done   .qstatus { color: #6bff8e; }
 .qrow.done   .qbar > div { background: #6bff8e; width: 100% !important; }
+.qrow.done.hide { display: none; }
+.qrow.q-far { display: none; }
+.qmore {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #8b90a6;
+  text-align: center;
+}
 .qrow.failed { background: #2b1b1b; }
 .qrow.failed .qstatus { color: #ff6b6b; }
 .qrow.failed .qbar > div { background: #ff6b6b; }
@@ -106,7 +129,12 @@ h1 { margin: 0 0 6px; font-size: 26px; }
     </div>
   </div>
 
-  <div id="overall"></div>
+  <div id="summary">
+    <div class="head" id="sumHead"></div>
+    <div class="bar"><div id="sumBar"></div></div>
+    <div class="current" id="sumCurrent"></div>
+    <div class="toggle" id="sumToggle"></div>
+  </div>
   <div id="queue" class="queue"></div>
 </div>
 
@@ -116,11 +144,16 @@ h1 { margin: 0 0 6px; font-size: 26px; }
   var inp = document.getElementById("files");
   var sendBtn = document.getElementById("send");
   var clearBtn = document.getElementById("clear");
-  var overall = document.getElementById("overall");
+  var summary = document.getElementById("summary");
+  var sumHead = document.getElementById("sumHead");
+  var sumBar = document.getElementById("sumBar");
+  var sumCurrent = document.getElementById("sumCurrent");
+  var sumToggle = document.getElementById("sumToggle");
   var queue = document.getElementById("queue");
   var items = [];           // { file, row, bar, status, state, xhr }
   var sending = false;
   var cancelRequested = false;
+  var showDone = false;     // when true, completed rows stay visible
 
   function fmtSize(n) {
     if (n < 1024) return n + " B";
@@ -142,13 +175,16 @@ h1 { margin: 0 0 6px; font-size: 26px; }
       queue.appendChild(row);
       it.row = row; it.bar = fill; it.status = status; it.state = "queued";
     });
+    applyQueuedWindow();
     updateButtons();
     updateOverall();
   }
 
   function escapeHtml(s) { return s.replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]; }); }
 
+  var WINDOW = 12; // max queued rows visible at once
   function setStatus(it, state, text, pct) {
+    var changed = it.state !== state;
     it.state = state;
     it.row.classList.remove("active", "done", "failed", "cancelled");
     if (state === "active")    it.row.classList.add("active");
@@ -157,6 +193,34 @@ h1 { margin: 0 0 6px; font-size: 26px; }
     if (state === "cancelled") it.row.classList.add("cancelled");
     if (text != null) it.status.textContent = text;
     if (pct != null) it.bar.style.width = pct + "%";
+    if (state === "done" && !showDone) it.row.classList.add("hide");
+    else it.row.classList.remove("hide");
+    // visibility window only matters on transitions, not on per-tick progress
+    if (changed) applyQueuedWindow();
+  }
+  // Hide queued rows beyond a fixed window so the visible list stays bounded
+  // even with thousands of files; the summary panel still shows the totals.
+  function applyQueuedWindow() {
+    var shown = 0;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (it.state === "queued") {
+        if (shown < WINDOW) { it.row.classList.remove("q-far"); shown++; }
+        else { it.row.classList.add("q-far"); }
+      } else {
+        it.row.classList.remove("q-far");
+      }
+    }
+    var existing = document.getElementById("qmore");
+    if (existing) existing.parentNode.removeChild(existing);
+    var totalQueued = items.filter(function (x) { return x.state === "queued"; }).length;
+    if (totalQueued > shown) {
+      var more = document.createElement("div");
+      more.id = "qmore";
+      more.className = "qmore";
+      more.textContent = "+ " + (totalQueued - shown) + " more queued";
+      queue.appendChild(more);
+    }
   }
 
   function updateButtons() {
@@ -175,16 +239,45 @@ h1 { margin: 0 0 6px; font-size: 26px; }
   }
 
   function updateOverall() {
-    if (!items.length) { overall.innerHTML = ""; return; }
-    var done = items.filter(function (x) { return x.state === "done"; }).length;
-    var failed = items.filter(function (x) { return x.state === "failed"; }).length;
+    if (!items.length) { summary.classList.remove("on"); return; }
+    summary.classList.add("on");
+    var done = 0, failed = 0, queued = 0, active = null;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (it.state === "done") done++;
+      else if (it.state === "failed") failed++;
+      else if (it.state === "active") active = it;
+      else queued++;
+    }
     var total = items.length;
-    var pct = Math.round((done + failed) / total * 100);
-    var bits = ["Uploaded " + done + " of " + total];
-    if (failed) bits.push(failed + " failed");
-    overall.innerHTML = bits.join(" · ") +
-      "<div class=\"bar\"><div style=\"width:" + pct + "%\"></div></div>";
+    var processed = done + failed;
+    var pct = Math.round(processed / total * 100);
+    var parts = [];
+    parts.push("<b>" + done + "</b> / " + total + " uploaded");
+    if (failed) parts.push("<span class=\"bad\"><b>" + failed + "</b> failed</span>");
+    if (queued) parts.push("<span class=\"dim\">" + queued + " queued</span>");
+    sumHead.innerHTML = parts.join(" · ");
+    sumBar.style.width = pct + "%";
+    sumCurrent.innerHTML = active
+      ? "Current: <b>" + escapeHtml(active.file.name) + "</b>"
+      : (sending ? "Preparing…" : (processed === total ? "Done." : ""));
+    if (done > 0) {
+      sumToggle.textContent = showDone ? "Hide " + done + " completed" : "Show " + done + " completed";
+      sumToggle.style.display = "inline-block";
+    } else {
+      sumToggle.style.display = "none";
+    }
   }
+  sumToggle.addEventListener("click", function () {
+    showDone = !showDone;
+    items.forEach(function (it) {
+      if (it.state === "done") {
+        if (showDone) it.row.classList.remove("hide");
+        else it.row.classList.add("hide");
+      }
+    });
+    updateOverall();
+  });
 
   function addFiles(list) {
     var arr = Array.prototype.slice.call(list).filter(function (f) {
