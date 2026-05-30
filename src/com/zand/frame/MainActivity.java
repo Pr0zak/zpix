@@ -239,7 +239,10 @@ public class MainActivity extends Activity {
                         new File(UPLOAD_DIR), bos.toByteArray(),
                         new Runnable() { public void run() {
                             new File(UPLOAD_DIR).setReadable(true, false);
-                        }});
+                        }},
+                        new UploadServer.InfoProvider() {
+                            public String json() { return storageInfoJson(); }
+                        });
                 return uploadServer.start();
             } catch (Exception e) {
                 return false;
@@ -265,6 +268,37 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String uploadDir() { return UPLOAD_DIR; }
+
+        private String storageInfoJson() {
+            try {
+                File dir = new File(UPLOAD_DIR);
+                dir.mkdirs();
+                android.os.StatFs sf = new android.os.StatFs(dir.getPath());
+                long bs, total, free;
+                if (android.os.Build.VERSION.SDK_INT >= 18) {
+                    bs = sf.getBlockSizeLong();
+                    total = sf.getBlockCountLong() * bs;
+                    free = sf.getAvailableBlocksLong() * bs;
+                } else {
+                    bs = sf.getBlockSize();
+                    total = (long) sf.getBlockCount() * bs;
+                    free = (long) sf.getAvailableBlocks() * bs;
+                }
+                int uploads = 0;
+                long uploadsBytes = 0;
+                File[] kids = dir.listFiles();
+                if (kids != null) for (File f : kids) {
+                    if (f.isFile()) { uploads++; uploadsBytes += f.length(); }
+                }
+                return "{\"total\":" + total +
+                       ",\"free\":" + free +
+                       ",\"used\":" + (total - free) +
+                       ",\"uploads\":" + uploads +
+                       ",\"uploadsBytes\":" + uploadsBytes + "}";
+            } catch (Exception e) {
+                return "{}";
+            }
+        }
 
         private String wifiIp() {
             try {

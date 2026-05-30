@@ -19,19 +19,23 @@ import java.util.Map;
  * POSTs at /upload.
  */
 public class UploadServer {
+    public interface InfoProvider { String json(); }
+
     private final int port;
     private final File uploadDir;
     private final byte[] htmlBytes;
     private final Runnable onUpload;
+    private final InfoProvider infoProvider;
     private ServerSocket server;
     private Thread acceptThread;
     private volatile boolean running;
 
-    public UploadServer(int port, File uploadDir, byte[] htmlBytes, Runnable onUpload) {
+    public UploadServer(int port, File uploadDir, byte[] htmlBytes, Runnable onUpload, InfoProvider infoProvider) {
         this.port = port;
         this.uploadDir = uploadDir;
         this.htmlBytes = htmlBytes;
         this.onUpload = onUpload;
+        this.infoProvider = infoProvider;
     }
 
     public boolean isRunning() { return running; }
@@ -99,6 +103,9 @@ public class UploadServer {
 
             if ("GET".equals(method) && (path.equals("/") || path.equals("/index.html"))) {
                 write(out, 200, "OK", "text/html; charset=utf-8", htmlBytes);
+            } else if ("GET".equals(method) && path.equals("/info")) {
+                String json = infoProvider != null ? infoProvider.json() : "{}";
+                write(out, 200, "OK", "application/json", json.getBytes("UTF-8"));
             } else if ("POST".equals(method) && path.equals("/upload")) {
                 int saved = handleUpload(in, headers);
                 if (saved > 0 && onUpload != null) onUpload.run();
