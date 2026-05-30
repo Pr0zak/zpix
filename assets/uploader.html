@@ -14,13 +14,13 @@ body {
   color: #e8e9ee;
   min-height: 100vh;
 }
-.wrap { max-width: 620px; margin: 0 auto; }
+.wrap { max-width: 720px; margin: 0 auto; }
 h1 { margin: 0 0 6px; font-size: 26px; }
 .sub { color: #aeb3c4; margin: 0 0 22px; }
 .drop {
   border: 2px dashed #353a4a;
   border-radius: 14px;
-  padding: 36px 20px;
+  padding: 28px 20px;
   text-align: center;
   background: #1a1d28;
   transition: border-color .15s, background .15s;
@@ -33,8 +33,8 @@ h1 { margin: 0 0 6px; font-size: 26px; }
   font-size: 14px;
   color: #cfd3df;
 }
+.actions { margin-top: 14px; display: flex; gap: 12px; justify-content: center; }
 .btn {
-  display: inline-block;
   padding: 12px 22px;
   background: #6b7bff;
   color: #fff;
@@ -44,77 +44,222 @@ h1 { margin: 0 0 6px; font-size: 26px; }
   font-weight: 600;
   cursor: pointer;
 }
+.btn.ghost { background: #262a36; color: #cfd3df; }
 .btn:disabled { opacity: .45; cursor: default; }
-#out { margin-top: 16px; color: #aeb3c4; font-size: 14px; min-height: 1.2em; }
-.ok { color: #6bff8e; }
-.err { color: #ff6b6b; }
+
+#overall { margin-top: 18px; color: #aeb3c4; font-size: 14px; }
+#overall .bar { height: 6px; background: #2a2e3a; border-radius: 3px; overflow: hidden; margin-top: 8px; }
+#overall .bar > div { height: 100%; background: #6b7bff; width: 0; transition: width .25s; }
+
+.queue { margin-top: 16px; }
+.qrow {
+  display: grid;
+  grid-template-columns: 1fr 110px 88px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #1a1d28;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+.qname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qname .sz { color: #6f7a93; font-size: 12px; margin-left: 6px; }
+.qbar {
+  height: 6px;
+  background: #2a2e3a;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.qbar > div {
+  height: 100%;
+  background: #6b7bff;
+  width: 0;
+  transition: width .15s;
+}
+.qstatus { font-size: 12px; color: #aeb3c4; text-align: right; }
+.qrow.done   { background: #1b2a1c; }
+.qrow.done   .qstatus { color: #6bff8e; }
+.qrow.done   .qbar > div { background: #6bff8e; width: 100% !important; }
+.qrow.failed { background: #2b1b1b; }
+.qrow.failed .qstatus { color: #ff6b6b; }
+.qrow.failed .qbar > div { background: #ff6b6b; }
+.qrow.active .qstatus { color: #e8e9ee; }
+.cancelled .qstatus { color: #6f7a93; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>zpix uploader</h1>
-  <p class="sub">Drop photos here to send them to the frame. They will appear in the slideshow on the next restart.</p>
+  <p class="sub">Drop photos here to send them to the frame. They'll appear in the slideshow on the next restart.</p>
+
   <div class="drop" id="drop">
     <p>Tap to choose photos, or drag and drop here</p>
     <input type="file" id="files" multiple accept="image/*">
-    <button class="btn" id="send" disabled>Send to frame</button>
+    <div class="actions">
+      <button class="btn ghost" id="clear" disabled>Clear</button>
+      <button class="btn" id="send" disabled>Send to frame</button>
+    </div>
   </div>
-  <div id="out"></div>
+
+  <div id="overall"></div>
+  <div id="queue" class="queue"></div>
 </div>
+
 <script>
 (function () {
   var drop = document.getElementById("drop");
   var inp = document.getElementById("files");
-  var btn = document.getElementById("send");
-  var out = document.getElementById("out");
-  var selected = [];
+  var sendBtn = document.getElementById("send");
+  var clearBtn = document.getElementById("clear");
+  var overall = document.getElementById("overall");
+  var queue = document.getElementById("queue");
+  var items = [];           // { file, row, bar, status, state, xhr }
+  var sending = false;
+  var cancelRequested = false;
 
-  function update() {
-    btn.disabled = selected.length === 0;
-    btn.textContent = selected.length
-      ? "Send " + selected.length + " photo" + (selected.length === 1 ? "" : "s")
-      : "Send to frame";
+  function fmtSize(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / 1024 / 1024).toFixed(1) + " MB";
   }
-  inp.addEventListener("change", function () {
-    selected = Array.prototype.slice.call(inp.files);
-    update();
-  });
+
+  function render() {
+    queue.innerHTML = "";
+    items.forEach(function (it, i) {
+      var row = document.createElement("div");
+      row.className = "qrow";
+      var name = document.createElement("div"); name.className = "qname";
+      name.innerHTML = "<b>" + i + 1 + ".</b> " + escapeHtml(it.file.name) + " <span class=\"sz\">" + fmtSize(it.file.size) + "</span>";
+      var bar = document.createElement("div"); bar.className = "qbar";
+      var fill = document.createElement("div"); bar.appendChild(fill);
+      var status = document.createElement("div"); status.className = "qstatus"; status.textContent = "Queued";
+      row.appendChild(name); row.appendChild(bar); row.appendChild(status);
+      queue.appendChild(row);
+      it.row = row; it.bar = fill; it.status = status; it.state = "queued";
+    });
+    updateButtons();
+    updateOverall();
+  }
+
+  function escapeHtml(s) { return s.replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]; }); }
+
+  function setStatus(it, state, text, pct) {
+    it.state = state;
+    it.row.classList.remove("active", "done", "failed", "cancelled");
+    if (state === "active")    it.row.classList.add("active");
+    if (state === "done")      it.row.classList.add("done");
+    if (state === "failed")    it.row.classList.add("failed");
+    if (state === "cancelled") it.row.classList.add("cancelled");
+    if (text != null) it.status.textContent = text;
+    if (pct != null) it.bar.style.width = pct + "%";
+  }
+
+  function updateButtons() {
+    if (sending) {
+      sendBtn.textContent = "Cancel";
+      sendBtn.disabled = false;
+      clearBtn.disabled = true;
+      inp.disabled = true;
+    } else {
+      var pending = items.filter(function (x) { return x.state === "queued" || x.state === "failed"; }).length;
+      sendBtn.textContent = pending ? "Send " + pending + " photo" + (pending === 1 ? "" : "s") : "Send to frame";
+      sendBtn.disabled = items.length === 0;
+      clearBtn.disabled = items.length === 0;
+      inp.disabled = false;
+    }
+  }
+
+  function updateOverall() {
+    if (!items.length) { overall.innerHTML = ""; return; }
+    var done = items.filter(function (x) { return x.state === "done"; }).length;
+    var failed = items.filter(function (x) { return x.state === "failed"; }).length;
+    var total = items.length;
+    var pct = Math.round((done + failed) / total * 100);
+    var bits = ["Uploaded " + done + " of " + total];
+    if (failed) bits.push(failed + " failed");
+    overall.innerHTML = bits.join(" · ") +
+      "<div class=\"bar\"><div style=\"width:" + pct + "%\"></div></div>";
+  }
+
+  function addFiles(list) {
+    var arr = Array.prototype.slice.call(list).filter(function (f) {
+      return /^image\//i.test(f.type) || /\.(jpe?g|png|gif|webp|bmp)$/i.test(f.name);
+    });
+    // dedupe by name+size
+    arr.forEach(function (f) {
+      var dup = items.some(function (x) { return x.file.name === f.name && x.file.size === f.size; });
+      if (!dup) items.push({ file: f });
+    });
+    render();
+  }
+
   ["dragenter", "dragover"].forEach(function (e) {
     drop.addEventListener(e, function (ev) { ev.preventDefault(); drop.classList.add("over"); });
   });
   ["dragleave", "drop"].forEach(function (e) {
     drop.addEventListener(e, function (ev) { ev.preventDefault(); drop.classList.remove("over"); });
   });
-  drop.addEventListener("drop", function (ev) {
-    selected = Array.prototype.slice.call(ev.dataTransfer.files).filter(function (f) {
-      return /^image\//i.test(f.type) || /\.(jpe?g|png|gif|webp|bmp)$/i.test(f.name);
-    });
-    update();
+  drop.addEventListener("drop", function (ev) { addFiles(ev.dataTransfer.files); });
+  inp.addEventListener("change", function () { addFiles(inp.files); inp.value = ""; });
+
+  clearBtn.addEventListener("click", function () {
+    if (sending) return;
+    items = []; queue.innerHTML = ""; updateButtons(); updateOverall();
   });
 
-  btn.addEventListener("click", function () {
-    if (!selected.length) return;
-    var fd = new FormData();
-    for (var i = 0; i < selected.length; i++) fd.append("file" + i, selected[i], selected[i].name);
-    btn.disabled = true;
-    out.textContent = "Uploading " + selected.length + " photos...";
-    out.className = "";
-    var xhr = new XMLHttpRequest();
-    xhr.open("POST", "/upload");
-    xhr.onload = function () {
-      try {
-        var j = JSON.parse(xhr.responseText || "{}");
-        out.textContent = "Saved " + (j.saved || 0) + " photos. They'll appear on the next zpix restart.";
-        out.className = "ok";
-      } catch (e) {
-        out.textContent = "Upload finished (could not parse server response).";
-        out.className = "ok";
+  sendBtn.addEventListener("click", async function () {
+    if (sending) { cancelRequested = true; return; }
+    cancelRequested = false;
+    sending = true; updateButtons();
+    for (var i = 0; i < items.length; i++) {
+      if (cancelRequested) {
+        for (var j = i; j < items.length; j++) {
+          if (items[j].state === "queued") setStatus(items[j], "cancelled", "Cancelled");
+        }
+        break;
       }
-      selected = []; inp.value = ""; update();
-    };
-    xhr.onerror = function () { out.textContent = "Upload failed."; out.className = "err"; btn.disabled = false; };
-    xhr.send(fd);
+      if (items[i].state === "done") continue;
+      await uploadOne(items[i]);
+      updateOverall();
+    }
+    sending = false; updateButtons(); updateOverall();
   });
+
+  function uploadOne(it) {
+    return new Promise(function (resolve) {
+      setStatus(it, "active", "Uploading 0%", 0);
+      var xhr = new XMLHttpRequest();
+      it.xhr = xhr;
+      xhr.open("POST", "/upload");
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) {
+          var pct = Math.round(e.loaded / e.total * 100);
+          setStatus(it, "active", "Uploading " + pct + "%", pct);
+        }
+      };
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          var saved = 0;
+          try { saved = (JSON.parse(xhr.responseText || "{}").saved | 0); } catch (e) { saved = 1; }
+          if (saved > 0) setStatus(it, "done", "Saved", 100);
+          else setStatus(it, "failed", "Not saved", 0);
+        } else {
+          setStatus(it, "failed", "HTTP " + xhr.status, 0);
+        }
+        resolve();
+      };
+      xhr.onerror = function () { setStatus(it, "failed", "Network error", 0); resolve(); };
+      xhr.onabort = function () { setStatus(it, "cancelled", "Cancelled", 0); resolve(); };
+      var fd = new FormData();
+      fd.append("file", it.file, it.file.name);
+      try { xhr.send(fd); } catch (e) { setStatus(it, "failed", "Send failed", 0); resolve(); }
+    });
+  }
 })();
 </script>
 </body>
