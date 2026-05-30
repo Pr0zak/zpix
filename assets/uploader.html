@@ -95,18 +95,58 @@ h1 { margin: 0 0 6px; font-size: 26px; }
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 8px 0 14px; border-bottom: 1px solid #20232e;
 }
-#bToolbar button {
+#bToolbar button, #bToolbar select {
   background: #262a36; color: #cfd3df; border: none; border-radius: 8px;
   padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
 }
+#bToolbar select { padding: 8px 10px; }
 #bToolbar button.danger { background: #4a1f1f; color: #ff9a9a; }
 #bToolbar button:disabled { opacity: .45; cursor: default; }
-#selInfo { margin-left: auto; font-size: 13px; color: #aeb3c4; }
+#bToolbar .spacer { flex: 1; }
+#selInfo { font-size: 13px; color: #aeb3c4; }
 
 #bList {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px; padding-top: 14px;
 }
+/* List view: rows with thumbnail + name + meta + size */
+#bList.list {
+  display: block;
+}
+#bList.list .bitem {
+  display: grid;
+  grid-template-columns: 48px 1fr 150px 110px 28px;
+  align-items: center; gap: 12px;
+  padding: 8px 12px; margin-bottom: 4px;
+}
+#bList.list .bitem .thumb {
+  width: 48px; height: 48px; border-radius: 6px;
+}
+#bList.list .bitem .folder { width: 36px; height: 28px; }
+#bList.list .bitem .folder::before { width: 16px; height: 7px; top: -5px; }
+#bList.list .bitem .nm { margin-top: 0; font-size: 14px; }
+#bList.list .bitem .sub { display: none; }
+#bList.list .bitem .meta {
+  font-size: 12px; color: #aeb3c4; text-align: right; font-variant-numeric: tabular-nums;
+}
+#bList.list .bitem .sz {
+  font-size: 12px; color: #aeb3c4; text-align: right; font-variant-numeric: tabular-nums;
+}
+#bList.list .bitem .check {
+  position: static; margin-left: auto;
+}
+.bitem .meta { display: none; }   /* hidden in grid view */
+.bitem .sz   { display: none; }   /* hidden in grid view */
+
+#bPager {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 14px 0 8px; font-size: 13px; color: #aeb3c4;
+}
+#bPager button {
+  background: #262a36; color: #cfd3df; border: none; border-radius: 8px;
+  padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+#bPager button:disabled { opacity: .35; cursor: default; }
 .bitem {
   position: relative; background: #1a1d28; border-radius: 10px; padding: 8px;
   cursor: pointer; user-select: none; border: 2px solid transparent;
@@ -235,8 +275,17 @@ h1 { margin: 0 0 6px; font-size: 26px; }
       <button id="bDelete" type="button" class="danger" disabled>Delete</button>
       <button id="bRename" type="button" disabled>Rename</button>
       <span id="selInfo"></span>
+      <span class="spacer"></span>
+      <select id="bSort" title="Sort by">
+        <option value="name">Name</option>
+        <option value="size">Size</option>
+        <option value="mtime">Date</option>
+      </select>
+      <button id="bSortDir" type="button" title="Sort direction">A→Z</button>
+      <button id="bView" type="button" title="View">List</button>
     </div>
     <div id="bList"></div>
+    <div id="bPager"></div>
   </div>
 </div>
 
@@ -527,6 +576,71 @@ h1 { margin: 0 0 6px; font-size: 26px; }
   var selInfo = document.getElementById("selInfo");
   var bDelete = document.getElementById("bDelete");
   var bRename = document.getElementById("bRename");
+  var bPager = document.getElementById("bPager");
+  var bSortSel = document.getElementById("bSort");
+  var bSortDir = document.getElementById("bSortDir");
+  var bView = document.getElementById("bView");
+
+  function readPref(key, fallback) {
+    try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
+  }
+  function writePref(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+
+  var viewMode = readPref("zpix_view", "grid");      // grid | list
+  var sortBy   = readPref("zpix_sort", "name");      // name | size | mtime
+  var sortDir  = readPref("zpix_sortdir", "asc");    // asc | desc
+  var page     = 0;
+  var pageSize = 100;
+
+  bSortSel.value = sortBy;
+  bSortDir.textContent = sortDirLabel();
+  bView.textContent = viewMode === "list" ? "Grid" : "List";
+
+  function sortDirLabel() {
+    if (sortBy === "name") return sortDir === "asc" ? "A→Z" : "Z→A";
+    if (sortBy === "size") return sortDir === "asc" ? "small→big" : "big→small";
+    return sortDir === "asc" ? "old→new" : "new→old";
+  }
+  bSortSel.addEventListener("change", function () {
+    sortBy = bSortSel.value; writePref("zpix_sort", sortBy);
+    bSortDir.textContent = sortDirLabel();
+    page = 0; renderBrowse();
+  });
+  bSortDir.addEventListener("click", function () {
+    sortDir = sortDir === "asc" ? "desc" : "asc"; writePref("zpix_sortdir", sortDir);
+    bSortDir.textContent = sortDirLabel();
+    page = 0; renderBrowse();
+  });
+  bView.addEventListener("click", function () {
+    viewMode = viewMode === "list" ? "grid" : "list"; writePref("zpix_view", viewMode);
+    bView.textContent = viewMode === "list" ? "Grid" : "List";
+    renderBrowse();
+  });
+
+  function sortedItems() {
+    var arr = bData.items.slice();
+    var dir = sortDir === "asc" ? 1 : -1;
+    arr.sort(function (a, b) {
+      // folders always before files
+      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+      var va, vb;
+      if (sortBy === "size") { va = a.isDir ? -1 : a.size; vb = b.isDir ? -1 : b.size; return dir * (va - vb); }
+      if (sortBy === "mtime") { va = a.mtime || 0; vb = b.mtime || 0; return dir * (va - vb); }
+      return dir * a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
+    return arr;
+  }
+
+  function fmtDate(ms) {
+    if (!ms) return "";
+    var d = new Date(ms);
+    var now = new Date();
+    var sameYear = d.getFullYear() === now.getFullYear();
+    var mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
+    var pad = function (n) { return n < 10 ? "0" + n : "" + n; };
+    if (sameYear) return mo + " " + d.getDate() + ", " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    return mo + " " + d.getDate() + ", " + d.getFullYear();
+  }
 
   document.getElementById("bRefresh").addEventListener("click", function () { browseTo(currentBrowse); });
   document.getElementById("bSelAll").addEventListener("click", function () {
@@ -581,6 +695,7 @@ h1 { margin: 0 0 6px; font-size: 26px; }
   function browseTo(rel) {
     currentBrowse = rel || "";
     selected = {};
+    page = 0;
     var xhr = new XMLHttpRequest();
     xhr.open("GET", "/browse?path=" + encodeURIComponent(currentBrowse));
     xhr.onload = function () {
@@ -617,16 +732,56 @@ h1 { margin: 0 0 6px; font-size: 26px; }
         }
       });
     }
-    // items grid
+    // items
+    bList.className = viewMode === "list" ? "list" : "";
     bList.innerHTML = "";
-    if (!bData.items.length) {
+    var all = sortedItems();
+    var total = all.length;
+    var pages = Math.max(1, Math.ceil(total / pageSize));
+    if (page >= pages) page = pages - 1;
+    if (page < 0) page = 0;
+    var slice = all.slice(page * pageSize, page * pageSize + pageSize);
+
+    if (!total) {
       var em = document.createElement("div"); em.id = "emptyBrowse";
       em.textContent = "This folder is empty.";
       bList.appendChild(em);
     } else {
-      bData.items.forEach(function (it) { bList.appendChild(buildItem(it)); });
+      slice.forEach(function (it) { bList.appendChild(buildItem(it)); });
     }
+    renderPager(total, pages);
     updateSelInfo();
+  }
+
+  function renderPager(total, pages) {
+    bPager.innerHTML = "";
+    if (total <= pageSize) {
+      if (total > 0) {
+        var n = document.createElement("span");
+        n.textContent = total + " item" + (total === 1 ? "" : "s");
+        bPager.appendChild(n);
+      }
+      return;
+    }
+    var first = document.createElement("button"); first.textContent = "« First";
+    first.disabled = page === 0;
+    first.addEventListener("click", function () { page = 0; renderBrowse(); window.scrollTo(0, 0); });
+    var prev = document.createElement("button"); prev.textContent = "‹ Prev";
+    prev.disabled = page === 0;
+    prev.addEventListener("click", function () { page--; renderBrowse(); window.scrollTo(0, 0); });
+    var info = document.createElement("span");
+    var startN = page * pageSize + 1;
+    var endN = Math.min(total, (page + 1) * pageSize);
+    info.textContent = startN + "–" + endN + " of " + total + "  ·  page " + (page + 1) + "/" + pages;
+    var next = document.createElement("button"); next.textContent = "Next ›";
+    next.disabled = page >= pages - 1;
+    next.addEventListener("click", function () { page++; renderBrowse(); window.scrollTo(0, 0); });
+    var last = document.createElement("button"); last.textContent = "Last »";
+    last.disabled = page >= pages - 1;
+    last.addEventListener("click", function () { page = pages - 1; renderBrowse(); window.scrollTo(0, 0); });
+    bPager.appendChild(first); bPager.appendChild(prev);
+    bPager.appendChild(info);
+    bPager.appendChild(next); bPager.appendChild(last);
   }
 
   function buildItem(it) {
@@ -650,8 +805,12 @@ h1 { margin: 0 0 6px; font-size: 26px; }
     var nm = document.createElement("div"); nm.className = "nm"; nm.textContent = it.name;
     var sub = document.createElement("div"); sub.className = "sub";
     sub.textContent = it.isDir ? (it.count + " item" + (it.count === 1 ? "" : "s")) : fmtSize(it.size);
+    // list-view columns (CSS hides these in grid view)
+    var meta = document.createElement("div"); meta.className = "meta"; meta.textContent = fmtDate(it.mtime);
+    var sz = document.createElement("div"); sz.className = "sz";
+    sz.textContent = it.isDir ? (it.count + " item" + (it.count === 1 ? "" : "s")) : fmtSize(it.size);
     var chk = document.createElement("div"); chk.className = "check";
-    el.appendChild(thumb); el.appendChild(nm); el.appendChild(sub); el.appendChild(chk);
+    el.appendChild(thumb); el.appendChild(nm); el.appendChild(sub); el.appendChild(meta); el.appendChild(sz); el.appendChild(chk);
     chk.addEventListener("click", function (e) {
       e.stopPropagation();
       if (selected[it.path]) delete selected[it.path]; else selected[it.path] = true;
