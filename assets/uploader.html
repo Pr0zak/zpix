@@ -80,6 +80,70 @@ h1 { margin: 0 0 6px; font-size: 26px; }
 #storage .bar > div.warn { background: #ffb24d; }
 #storage .bar > div.bad  { background: #ff6b6b; }
 
+.tabs { display: flex; gap: 8px; margin: 0 0 14px; border-bottom: 1px solid #262a36; }
+.tab {
+  background: transparent; border: none; color: #aeb3c4; font-size: 15px; font-weight: 600;
+  padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent;
+}
+.tab.active { color: #fff; border-bottom-color: #6b7bff; }
+
+#crumbs { font-size: 14px; color: #aeb3c4; padding: 4px 0 12px; }
+#crumbs a { color: #8ea2ff; text-decoration: none; cursor: pointer; }
+#crumbs a:hover { text-decoration: underline; }
+
+#bToolbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 0 14px; border-bottom: 1px solid #20232e;
+}
+#bToolbar button {
+  background: #262a36; color: #cfd3df; border: none; border-radius: 8px;
+  padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+#bToolbar button.danger { background: #4a1f1f; color: #ff9a9a; }
+#bToolbar button:disabled { opacity: .45; cursor: default; }
+#selInfo { margin-left: auto; font-size: 13px; color: #aeb3c4; }
+
+#bList {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px; padding-top: 14px;
+}
+.bitem {
+  position: relative; background: #1a1d28; border-radius: 10px; padding: 8px;
+  cursor: pointer; user-select: none; border: 2px solid transparent;
+}
+.bitem.sel { border-color: #6b7bff; background: #1d2438; }
+.bitem .thumb {
+  width: 100%; height: 110px; background: #0c0d11; border-radius: 6px;
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+}
+.bitem .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bitem .folder {
+  width: 56px; height: 44px; background: #6b7bff; border-radius: 4px;
+  position: relative;
+}
+.bitem .folder::before {
+  content: ""; position: absolute; top: -8px; left: 0; width: 24px; height: 10px;
+  background: #6b7bff; border-radius: 4px 4px 0 0;
+}
+.bitem .nm {
+  font-size: 12px; color: #e8e9ee; margin-top: 6px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.bitem .sub {
+  font-size: 11px; color: #6f7a93; margin-top: 1px;
+}
+.bitem .check {
+  position: absolute; top: 6px; right: 6px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: rgba(0,0,0,.55); border: 1.5px solid #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: #fff;
+}
+.bitem.sel .check { background: #6b7bff; border-color: #6b7bff; }
+.bitem.sel .check::before { content: "\2713"; }
+
+#emptyBrowse { color: #6f7a93; text-align: center; padding: 24px; font-size: 14px; }
+
 .queue { margin-top: 16px; }
 .qrow {
   display: grid;
@@ -132,10 +196,16 @@ h1 { margin: 0 0 6px; font-size: 26px; }
 <body>
 <div class="wrap">
   <h1>zpix uploader</h1>
-  <p class="sub">Drop photos here to send them to the frame. They'll appear in the slideshow on the next restart.</p>
+  <p class="sub">Send photos to the frame, or manage what's already there.</p>
 
   <div id="storage"></div>
 
+  <div class="tabs">
+    <button class="tab active" data-tab="upload" type="button">Upload</button>
+    <button class="tab" data-tab="browse" type="button">Browse</button>
+  </div>
+
+  <div id="view-upload">
   <div class="drop" id="drop">
     <p>Tap to choose photos or a folder, or drag and drop here</p>
     <input type="file" id="files" multiple accept="image/*">
@@ -154,6 +224,20 @@ h1 { margin: 0 0 6px; font-size: 26px; }
     <div class="toggle" id="sumToggle"></div>
   </div>
   <div id="queue" class="queue"></div>
+  </div><!-- /#view-upload -->
+
+  <div id="view-browse" hidden>
+    <div id="crumbs"></div>
+    <div id="bToolbar">
+      <button id="bNew" type="button">New folder</button>
+      <button id="bRefresh" type="button">Refresh</button>
+      <button id="bSelAll" type="button">Select all</button>
+      <button id="bDelete" type="button" class="danger" disabled>Delete</button>
+      <button id="bRename" type="button" disabled>Rename</button>
+      <span id="selInfo"></span>
+    </div>
+    <div id="bList"></div>
+  </div>
 </div>
 
 <script>
@@ -422,6 +506,176 @@ h1 { margin: 0 0 6px; font-size: 26px; }
     sending = false; updateButtons(); updateOverall();
     fetchStorage();
   });
+
+  // ---------- tabs ----------
+  var tabUpload = document.querySelector('.tab[data-tab="upload"]');
+  var tabBrowse = document.querySelector('.tab[data-tab="browse"]');
+  var viewUpload = document.getElementById("view-upload");
+  var viewBrowse = document.getElementById("view-browse");
+  tabUpload.addEventListener("click", function () { showTab("upload"); });
+  tabBrowse.addEventListener("click", function () { showTab("browse"); browseTo(currentBrowse); });
+  function showTab(name) {
+    tabUpload.classList.toggle("active", name === "upload");
+    tabBrowse.classList.toggle("active", name === "browse");
+    viewUpload.hidden = name !== "upload";
+    viewBrowse.hidden = name !== "browse";
+  }
+
+  // ---------- browse ----------
+  var currentBrowse = "";
+  var bData = { items: [] };
+  var selected = {}; // path -> true
+  var bList = document.getElementById("bList");
+  var crumbs = document.getElementById("crumbs");
+  var selInfo = document.getElementById("selInfo");
+  var bDelete = document.getElementById("bDelete");
+  var bRename = document.getElementById("bRename");
+
+  document.getElementById("bRefresh").addEventListener("click", function () { browseTo(currentBrowse); });
+  document.getElementById("bSelAll").addEventListener("click", function () {
+    var any = Object.keys(selected).length === 0;
+    selected = {};
+    if (any) bData.items.forEach(function (it) { selected[it.path] = true; });
+    render();
+  });
+  document.getElementById("bNew").addEventListener("click", function () {
+    var name = prompt("New folder name:");
+    if (!name) return;
+    api("POST", "/mkdir", { path: currentBrowse, name: name }).then(function (j) {
+      if (j && j.ok) browseTo(currentBrowse);
+      else alert("Failed: " + ((j && j.error) || "could not create"));
+    });
+  });
+  bRename.addEventListener("click", function () {
+    var paths = Object.keys(selected);
+    if (paths.length !== 1) return;
+    var path = paths[0];
+    var current = bData.items.filter(function (x) { return x.path === path; })[0];
+    if (!current) return;
+    var newName = prompt("Rename '" + current.name + "' to:", current.name);
+    if (!newName || newName === current.name) return;
+    api("POST", "/rename", { path: path, newName: newName }).then(function (j) {
+      if (j && j.ok) { selected = {}; browseTo(currentBrowse); }
+      else alert("Failed: " + ((j && j.error) || "could not rename"));
+    });
+  });
+  bDelete.addEventListener("click", function () {
+    var paths = Object.keys(selected);
+    if (!paths.length) return;
+    if (!confirm("Delete " + paths.length + " item" + (paths.length === 1 ? "" : "s") + "? This cannot be undone.")) return;
+    api("POST", "/delete", { paths: paths }).then(function (j) {
+      selected = {};
+      browseTo(currentBrowse);
+      if (j && j.failed) alert(j.failed + " could not be deleted.");
+    });
+  });
+
+  function api(method, url, body) {
+    return new Promise(function (resolve) {
+      var xhr = new XMLHttpRequest();
+      xhr.open(method, url);
+      xhr.setRequestHeader("Content-Type", "application/json");
+      xhr.onload = function () { try { resolve(JSON.parse(xhr.responseText || "{}")); } catch (e) { resolve({}); } };
+      xhr.onerror = function () { resolve({}); };
+      xhr.send(body ? JSON.stringify(body) : null);
+    });
+  }
+
+  function browseTo(rel) {
+    currentBrowse = rel || "";
+    selected = {};
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", "/browse?path=" + encodeURIComponent(currentBrowse));
+    xhr.onload = function () {
+      try { bData = JSON.parse(xhr.responseText || "{}"); } catch (e) { bData = { items: [] }; }
+      if (!bData.items) bData.items = [];
+      render();
+    };
+    xhr.onerror = function () { bData = { items: [] }; render(); };
+    xhr.send();
+  }
+
+  function render() {
+    // crumbs
+    crumbs.innerHTML = "";
+    var aRoot = document.createElement("a");
+    aRoot.textContent = "uploads";
+    aRoot.addEventListener("click", function () { browseTo(""); });
+    crumbs.appendChild(aRoot);
+    if (currentBrowse) {
+      var segs = currentBrowse.split("/");
+      var acc = "";
+      segs.forEach(function (s, i) {
+        crumbs.appendChild(document.createTextNode(" / "));
+        acc = acc ? acc + "/" + s : s;
+        if (i === segs.length - 1) {
+          var span = document.createElement("span");
+          span.textContent = s;
+          crumbs.appendChild(span);
+        } else {
+          var a = document.createElement("a");
+          a.textContent = s;
+          (function (p) { a.addEventListener("click", function () { browseTo(p); }); })(acc);
+          crumbs.appendChild(a);
+        }
+      });
+    }
+    // items grid
+    bList.innerHTML = "";
+    if (!bData.items.length) {
+      var em = document.createElement("div"); em.id = "emptyBrowse";
+      em.textContent = "This folder is empty.";
+      bList.appendChild(em);
+    } else {
+      bData.items.forEach(function (it) { bList.appendChild(buildItem(it)); });
+    }
+    updateSelInfo();
+  }
+
+  function buildItem(it) {
+    var el = document.createElement("div"); el.className = "bitem";
+    if (selected[it.path]) el.classList.add("sel");
+    var thumb = document.createElement("div"); thumb.className = "thumb";
+    if (it.isDir) {
+      var fi = document.createElement("div"); fi.className = "folder";
+      thumb.appendChild(fi);
+    } else if (it.isImage) {
+      var img = document.createElement("img");
+      img.loading = "lazy";
+      img.src = "/file?path=" + encodeURIComponent(it.path);
+      thumb.appendChild(img);
+    } else {
+      var dot = it.name.lastIndexOf(".");
+      var ext = dot >= 0 ? it.name.substring(dot + 1).toUpperCase() : "FILE";
+      var d = document.createElement("div"); d.style.color = "#6f7a93"; d.style.fontSize = "13px"; d.textContent = ext;
+      thumb.appendChild(d);
+    }
+    var nm = document.createElement("div"); nm.className = "nm"; nm.textContent = it.name;
+    var sub = document.createElement("div"); sub.className = "sub";
+    sub.textContent = it.isDir ? (it.count + " item" + (it.count === 1 ? "" : "s")) : fmtSize(it.size);
+    var chk = document.createElement("div"); chk.className = "check";
+    el.appendChild(thumb); el.appendChild(nm); el.appendChild(sub); el.appendChild(chk);
+    chk.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (selected[it.path]) delete selected[it.path]; else selected[it.path] = true;
+      render();
+    });
+    el.addEventListener("click", function () {
+      if (it.isDir) browseTo(it.path);
+      else {
+        if (selected[it.path]) delete selected[it.path]; else selected[it.path] = true;
+        render();
+      }
+    });
+    return el;
+  }
+
+  function updateSelInfo() {
+    var n = Object.keys(selected).length;
+    bDelete.disabled = n === 0;
+    bRename.disabled = n !== 1;
+    selInfo.textContent = n ? (n + " selected") : "";
+  }
 
   function uploadOne(it) {
     return new Promise(function (resolve) {

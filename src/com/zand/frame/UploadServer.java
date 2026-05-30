@@ -4,14 +4,21 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URLDecoder;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
  * Tiny HTTP server that lets any device on the wifi drop photos into a folder
@@ -106,11 +113,26 @@ public class UploadServer {
             } else if ("GET".equals(method) && path.equals("/info")) {
                 String json = infoProvider != null ? infoProvider.json() : "{}";
                 write(out, 200, "OK", "application/json", json.getBytes("UTF-8"));
+            } else if ("GET".equals(method) && path.equals("/browse")) {
+                String relPath = queryParam(parts[1], "path");
+                write(out, 200, "OK", "application/json", browseJson(relPath).getBytes("UTF-8"));
+            } else if ("GET".equals(method) && path.equals("/file")) {
+                String relPath = queryParam(parts[1], "path");
+                serveFile(out, relPath);
             } else if ("POST".equals(method) && path.equals("/upload")) {
                 int saved = handleUpload(in, headers);
                 if (saved > 0 && onUpload != null) onUpload.run();
                 byte[] body = ("{\"saved\":" + saved + "}").getBytes("UTF-8");
                 write(out, 200, "OK", "application/json", body);
+            } else if ("POST".equals(method) && path.equals("/mkdir")) {
+                byte[] resp = handleMkdir(readBody(in, headers));
+                write(out, 200, "OK", "application/json", resp);
+            } else if ("POST".equals(method) && path.equals("/rename")) {
+                byte[] resp = handleRename(readBody(in, headers));
+                write(out, 200, "OK", "application/json", resp);
+            } else if ("POST".equals(method) && path.equals("/delete")) {
+                byte[] resp = handleDelete(readBody(in, headers));
+                write(out, 200, "OK", "application/json", resp);
             } else {
                 write(out, 404, "Not Found", "text/plain", "Not found".getBytes("UTF-8"));
             }
@@ -298,6 +320,218 @@ public class UploadServer {
             if (bos.size() > 16384) break; // safety
         }
         return bos.size() > 0 ? bos.toString("UTF-8") : null;
+    }
+
+    // ---------- browse / edit helpers ----------
+
+    // Resolve a relative path to a File under uploadDir. Returns null on escape.
+    private File resolveSafe(String rel) {
+        if (rel == null) rel = "";
+        try { rel = URLDecoder.decode(rel, "UTF-8"); } catch (Exception e) {}
+        String[] segs = rel.replace('\\', '/').split("/");
+        StringBuilder sb = new StringBuilder();
+        for (String s : segs) {
+            if (s.length() == 0 || s.equals(".") || s.equals("..")) continue;
+            if (sb.length() > 0) sb.append('/');
+            sb.append(s);
+        }
+        File f = sb.length() == 0 ? uploadDir : new File(uploadDir, sb.toString());
+        try {
+            String fc = f.getCanonicalPath();
+            String uc = uploadDir.getCanonicalPath();
+            if (fc.equals(uc) || fc.startsWith(uc + "/") || fc.startsWith(uc + File.separator)) return f;
+        } catch (IOException e) { }
+        return null;
+    }
+
+    private String queryParam(String requestPath, String name) {
+        int q = requestPath.indexOf('?');
+        if (q < 0) return null;
+        String qs = requestPath.substring(q + 1);
+        for (String p : qs.split("&")) {
+            int eq = p.indexOf('=');
+            if (eq < 0) continue;
+            if (p.substring(0, eq).equals(name)) return p.substring(eq + 1);
+        }
+        return null;
+    }
+
+    private String relativeToUploadDir(File f) throws IOException {
+        String fc = f.getCanonicalPath();
+        String uc = uploadDir.getCanonicalPath();
+        if (fc.equals(uc)) return "";
+        if (fc.startsWith(uc + File.separator)) return fc.substring(uc.length() + 1).replace(File.separatorChar, '/');
+        return fc;
+    }
+
+    private String browseJson(String relPath) {
+        try {
+            File dir = resolveSafe(relPath);
+            if (dir == null || !dir.exists() || !dir.isDirectory()) return "{\"error\":\"bad path\"}";
+            JSONObject res = new JSONObject();
+            String rel = relativeToUploadDir(dir);
+            res.put("path", rel);
+            String parent = "";
+            if (rel.length() > 0) {
+                int s = rel.lastIndexOf('/');
+                parent = s > 0 ? rel.substring(0, s) : "";
+            }
+            res.put("parent", parent);
+            res.put("hasParent", rel.length() > 0);
+            JSONArray items = new JSONArray();
+            File[] kids = dir.listFiles();
+            if (kids != null) {
+                Arrays.sort(kids, new Comparator<File>() {
+                    public int compare(File a, File b) {
+                        if (a.isDirectory() != b.isDirectory()) return a.isDirectory() ? -1 : 1;
+                        return a.getName().compareToIgnoreCase(b.getName());
+                    }
+                });
+                for (File k : kids) {
+                    JSONObject o = new JSONObject();
+                    o.put("name", k.getName());
+                    o.put("isDir", k.isDirectory());
+                    o.put("size", k.length());
+                    o.put("mtime", k.lastModified());
+                    o.put("path", rel.length() > 0 ? rel + "/" + k.getName() : k.getName());
+                    if (k.isFile()) {
+                        String ext = "";
+                        int dot = k.getName().lastIndexOf('.');
+                        if (dot >= 0) ext = k.getName().substring(dot + 1).toLowerCase();
+                        o.put("isImage", ext.equals("jpg") || ext.equals("jpeg") || ext.equals("png")
+                                || ext.equals("gif") || ext.equals("webp") || ext.equals("bmp"));
+                    } else {
+                        int n = 0;
+                        File[] gk = k.listFiles();
+                        if (gk != null) n = gk.length;
+                        o.put("count", n);
+                    }
+                    items.put(o);
+                }
+            }
+            res.put("items", items);
+            return res.toString();
+        } catch (Exception e) {
+            return "{\"error\":\"" + e.getMessage() + "\"}";
+        }
+    }
+
+    private void serveFile(OutputStream out, String relPath) throws IOException {
+        File f = resolveSafe(relPath);
+        if (f == null || !f.exists() || !f.isFile()) {
+            write(out, 404, "Not Found", "text/plain", "Not found".getBytes("UTF-8"));
+            return;
+        }
+        String name = f.getName().toLowerCase();
+        String ct = "application/octet-stream";
+        if (name.endsWith(".jpg") || name.endsWith(".jpeg")) ct = "image/jpeg";
+        else if (name.endsWith(".png")) ct = "image/png";
+        else if (name.endsWith(".gif")) ct = "image/gif";
+        else if (name.endsWith(".webp")) ct = "image/webp";
+        else if (name.endsWith(".bmp")) ct = "image/bmp";
+        long len = f.length();
+        String head = "HTTP/1.1 200 OK\r\nContent-Type: " + ct + "\r\nContent-Length: " + len
+                + "\r\nCache-Control: max-age=300\r\nConnection: close\r\n\r\n";
+        out.write(head.getBytes("UTF-8"));
+        FileInputStream fis = new FileInputStream(f);
+        byte[] buf = new byte[16384];
+        int n;
+        while ((n = fis.read(buf)) > 0) out.write(buf, 0, n);
+        fis.close();
+        out.flush();
+    }
+
+    private byte[] handleMkdir(String body) {
+        try {
+            JSONObject j = new JSONObject(body == null ? "{}" : body);
+            String parent = j.optString("path", "");
+            String name = j.optString("name", "").trim();
+            if (name.length() == 0 || name.contains("/") || name.contains("\\") || name.equals(".") || name.equals("..")) {
+                return "{\"ok\":false,\"error\":\"invalid name\"}".getBytes("UTF-8");
+            }
+            File p = resolveSafe(parent);
+            if (p == null) return "{\"ok\":false,\"error\":\"bad path\"}".getBytes("UTF-8");
+            File nd = new File(p, name);
+            if (nd.exists()) return "{\"ok\":false,\"error\":\"already exists\"}".getBytes("UTF-8");
+            boolean ok = nd.mkdirs();
+            return ("{\"ok\":" + ok + ",\"path\":\"" + jsonEsc(relativeToUploadDir(nd)) + "\"}").getBytes("UTF-8");
+        } catch (Exception e) { return "{\"ok\":false}".getBytes(); }
+    }
+
+    private byte[] handleRename(String body) {
+        try {
+            JSONObject j = new JSONObject(body == null ? "{}" : body);
+            String path = j.optString("path", "");
+            String newName = j.optString("newName", "").trim();
+            if (newName.length() == 0 || newName.contains("/") || newName.contains("\\")
+                    || newName.equals(".") || newName.equals("..")) {
+                return "{\"ok\":false,\"error\":\"invalid name\"}".getBytes("UTF-8");
+            }
+            File f = resolveSafe(path);
+            if (f == null || !f.exists()) return "{\"ok\":false,\"error\":\"not found\"}".getBytes("UTF-8");
+            File parent = f.getParentFile();
+            File dest = new File(parent, newName);
+            if (dest.exists()) return "{\"ok\":false,\"error\":\"name taken\"}".getBytes("UTF-8");
+            boolean ok = f.renameTo(dest);
+            return ("{\"ok\":" + ok + ",\"path\":\"" + jsonEsc(relativeToUploadDir(dest)) + "\"}").getBytes("UTF-8");
+        } catch (Exception e) { return "{\"ok\":false}".getBytes(); }
+    }
+
+    private byte[] handleDelete(String body) {
+        int deleted = 0, failed = 0;
+        try {
+            JSONObject j = new JSONObject(body == null ? "{}" : body);
+            JSONArray arr = j.optJSONArray("paths");
+            if (arr != null) {
+                for (int i = 0; i < arr.length(); i++) {
+                    File f = resolveSafe(arr.optString(i, ""));
+                    if (f == null || !f.exists() || f.getCanonicalPath().equals(uploadDir.getCanonicalPath())) {
+                        failed++; continue;
+                    }
+                    if (deleteRecursive(f)) deleted++; else failed++;
+                }
+            }
+        } catch (Exception e) { }
+        return ("{\"deleted\":" + deleted + ",\"failed\":" + failed + "}").getBytes();
+    }
+
+    private boolean deleteRecursive(File f) {
+        if (f.isDirectory()) {
+            File[] kids = f.listFiles();
+            if (kids != null) for (File k : kids) if (!deleteRecursive(k)) return false;
+        }
+        return f.delete();
+    }
+
+    private String readBody(InputStream in, Map<String, String> headers) throws IOException {
+        String cl = headers.get("content-length");
+        if (cl == null) return "";
+        int n;
+        try { n = Integer.parseInt(cl); } catch (NumberFormatException e) { return ""; }
+        if (n <= 0 || n > 1024 * 1024) return "";
+        byte[] buf = new byte[n];
+        int read = 0;
+        while (read < n) {
+            int r = in.read(buf, read, n - read);
+            if (r < 0) break;
+            read += r;
+        }
+        return new String(buf, 0, read, "UTF-8");
+    }
+
+    private static String jsonEsc(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '"' || c == '\\') sb.append('\\').append(c);
+            else if (c == '\n') sb.append("\\n");
+            else if (c == '\r') sb.append("\\r");
+            else if (c == '\t') sb.append("\\t");
+            else if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
+            else sb.append(c);
+        }
+        return sb.toString();
     }
 
     private static void write(OutputStream out, int code, String status, String contentType, byte[] body) throws IOException {
