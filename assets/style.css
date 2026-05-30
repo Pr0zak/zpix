@@ -391,39 +391,41 @@ input[type=range] { width: 100%; height: 5vh; }
   text-transform: uppercase;
 }
 
-/* ---- filmstrip scroll ---- */
+/* ---- filmstrip scroll (looks like 35mm film) ---- */
 .filmstrip {
   position: absolute;
   top: 0;
   left: 0;
   height: 100%;
   display: flex;
-  gap: 0.6vh;
-  padding: 6vh 0;
+  gap: 1.6vh;            /* dark film material visible between frames */
+  padding: 6vh 1.6vh;    /* leave room for sprocket bands top/bottom */
   align-items: center;
+  background: #15171a;   /* film base colour */
   will-change: transform;
 }
 .filmstrip::before, .filmstrip::after {
   content: "";
   position: absolute;
   left: 0;
-  right: -100vw;
+  right: -200vw;
   height: 5vh;
+  /* perforations: light rounded-rect holes spaced evenly on the dark film */
   background:
-    radial-gradient(circle at 1.5vh 50%, #fafafa 0.7vh, transparent 0.8vh) repeat-x 0 50% / 3vh 2vh,
-    #0b0b0b;
+    radial-gradient(ellipse 1vh 1.4vh at 2vh 50%, #e6e6e8 0%, #e6e6e8 70%, transparent 75%)
+      repeat-x 0 50% / 4vh 100%,
+    #15171a;
 }
-.filmstrip::before { top: 0; }
-.filmstrip::after { bottom: 0; }
+.filmstrip::before { top: 0;    box-shadow: inset 0 -.2vh 0 rgba(0,0,0,.4); }
+.filmstrip::after  { bottom: 0; box-shadow: inset 0  .2vh 0 rgba(0,0,0,.4); }
 .fcell {
   flex: 0 0 auto;
-  height: 70vh;
-  width: 50vh;
+  height: 64vh;
+  width: 46vh;
   overflow: hidden;
   background: #000;
-  border: .4vh solid #f7f5ef;
   border-radius: .3vh;
-  box-shadow: 0 1.2vh 2.6vh rgba(0,0,0,.55);
+  box-shadow: 0 0 0 .3vh #0a0a0c;  /* subtle dark hairline = looks like a frame edge */
 }
 .fcell img { display: block; width: 100%; height: 100%; object-fit: cover; }
 

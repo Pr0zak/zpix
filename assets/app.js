@@ -7,7 +7,7 @@
   var stage, msg, splash, clockEl, settingsEl;
   var photos = [], order = [], cursor = 0;
   var currentScene = null, running = false, timer = null, clockTimer = null;
-  var dSingle, dMosaic, dFloat, dGrid, bag, TS = 1;
+  var dSingle, dMosaic, dFloat, dGrid, dFilm, bag, TS = 1;
   var pendingFolders = [];
   var browserEl, browserPath = "/sdcard";
 
@@ -429,7 +429,7 @@
       if (travel < vw * 0.4) travel = vw * 0.4;
       strip.style.transform = "translateX(" + Math.round(window.innerHeight * 0.2) + "px)";
       void strip.offsetWidth;
-      strip.style.transition = "transform " + dFloat + "ms linear";
+      strip.style.transition = "transform " + dFilm + "ms linear";
       strip.style.transform = "translateX(" + (-travel) + "px)";
     });
     return s;
@@ -526,7 +526,8 @@
                : tMosaic(items);
         currentScene = sc;
         setTimeout(function () { retire(prev); }, 2000);
-        var dwell = (type === "float" || type === "filmstrip") ? dFloat
+        var dwell = (type === "filmstrip") ? dFilm
+                  : (type === "float") ? dFloat
                   : (type === "origami" || type === "polaroid") ? dGrid
                   : dMosaic;
         timer = setTimeout(step, dwell);
@@ -558,6 +559,7 @@
     dMosaic = Math.round(settings.dwell * 1000 * 1.5);
     dFloat = Math.round(settings.dwell * 1000 * 2.0);
     dGrid = Math.round(settings.dwell * 1000 * 2.4); // origami wall stays a while
+    dFilm = Math.round(settings.dwell * 1000 * 4.0); // filmstrip scrolls slowly for a long time
   }
   function applySpeed() {
     var m = SPEEDS[settings.speed] || 1.0;
