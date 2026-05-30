@@ -144,12 +144,14 @@ h1 { margin: 0 0 6px; font-size: 26px; }
 
 #emptyBrowse { color: #6f7a93; text-align: center; padding: 24px; font-size: 14px; }
 
-/* hidden file input that a <label for="..."> still drives reliably across browsers */
-.hiddenInp {
-  position: absolute; width: 1px; height: 1px;
-  opacity: 0; overflow: hidden; pointer-events: none;
+/* on-page debug strip (v1.0.20+) */
+#dbg {
+  position: fixed; left: 8px; right: 8px; bottom: 8px;
+  background: rgba(0,0,0,0.85); color: #9ff7c4; font: 11px/1.35 monospace;
+  padding: 8px 10px; border-radius: 8px; max-height: 130px; overflow: auto;
+  z-index: 9999; border: 1px solid #2a3344;
 }
-label.btn { display: inline-block; line-height: 1; }
+#dbg b { color: #ffd470; }
 
 .queue { margin-top: 16px; }
 .qrow {
@@ -216,9 +218,9 @@ label.btn { display: inline-block; line-height: 1; }
   <div class="drop" id="drop">
     <p>Tap to choose photos or a folder, or drag and drop here</p>
     <input type="file" id="files" multiple accept="image/*">
-    <input type="file" id="folder" webkitdirectory directory mozdirectory class="hiddenInp">
+    <input type="file" id="folder" webkitdirectory directory mozdirectory style="display:none">
     <div class="actions">
-      <label for="folder" class="btn ghost" id="pickFolder">Choose folder</label>
+      <button class="btn ghost" id="pickFolder" type="button" onclick="document.getElementById('folder').click()">Choose folder</button>
       <button class="btn ghost" id="clear" type="button" disabled>Clear</button>
       <button class="btn" id="send" type="button" disabled>Send to frame</button>
     </div>
@@ -249,8 +251,25 @@ label.btn { display: inline-block; line-height: 1; }
 
 <script>
 (function () {
+  // ---------- on-page debug log (v1.0.20) ----------
+  var dbg = document.createElement("div"); dbg.id = "dbg";
+  dbg.innerHTML = "<b>zpix upload debug</b> — events show here. tap a button or drop a file.";
+  document.body.appendChild(dbg);
+  function log(msg) {
+    var line = document.createElement("div");
+    var t = new Date(); var hh = String(t.getHours()).padStart(2,"0");
+    var mm = String(t.getMinutes()).padStart(2,"0"); var ss = String(t.getSeconds()).padStart(2,"0");
+    line.textContent = "[" + hh + ":" + mm + ":" + ss + "] " + msg;
+    dbg.appendChild(line); dbg.scrollTop = dbg.scrollHeight;
+  }
+  window.addEventListener("error", function (e) {
+    log("JS ERROR: " + (e.message || "?") + " @ " + (e.filename || "") + ":" + (e.lineno || ""));
+  });
+  log("JS ready");
+
   var drop = document.getElementById("drop");
   var inp = document.getElementById("files");
+  log("refs: drop=" + (!!drop) + " files=" + (!!inp) + " folder=" + (!!document.getElementById("folder")));
   var sendBtn = document.getElementById("send");
   var clearBtn = document.getElementById("clear");
   var summary = document.getElementById("summary");
@@ -412,16 +431,20 @@ label.btn { display: inline-block; line-height: 1; }
   });
 
   function addFiles(list) {
+    var total = list && list.length || 0;
     var arr = Array.prototype.slice.call(list).filter(function (f) {
       return /^image\//i.test(f.type) || /\.(jpe?g|png|gif|webp|bmp)$/i.test(f.name);
     });
+    log("addFiles: in=" + total + " img=" + arr.length + " queue=" + items.length);
     // dedupe by name+size and add
+    var added = 0;
     arr.forEach(function (f) {
       var rel = f.webkitRelativePath || f._relPath || "";
       var key = (rel || f.name) + ":" + f.size;
       var dup = items.some(function (x) { return ((x.relPath || x.file.name) + ":" + x.file.size) === key; });
-      if (!dup) items.push({ file: f, relPath: rel || null });
+      if (!dup) { items.push({ file: f, relPath: rel || null }); added++; }
     });
+    log("addFiles done: added=" + added + " queue=" + items.length);
     render();
   }
 
@@ -462,6 +485,7 @@ label.btn { display: inline-block; line-height: 1; }
 
   drop.addEventListener("drop", function (ev) {
     var dt = ev.dataTransfer;
+    log("drop fired; items=" + (dt.items && dt.items.length) + " files=" + (dt.files && dt.files.length));
     if (dt.items && dt.items.length && dt.items[0].webkitGetAsEntry) {
       var promises = [];
       for (var i = 0; i < dt.items.length; i++) {
@@ -482,9 +506,10 @@ label.btn { display: inline-block; line-height: 1; }
       addFiles(dt.files);
     }
   });
-  inp.addEventListener("change", function () { addFiles(inp.files); inp.value = ""; });
-  // <label for="folder"> drives the picker natively, no JS click-trigger needed
+  inp.addEventListener("change", function () { log("files.change n=" + inp.files.length); addFiles(inp.files); inp.value = ""; });
+  document.getElementById("pickFolder").addEventListener("click", function () { log("pickFolder click"); });
   document.getElementById("folder").addEventListener("change", function (e) {
+    log("folder.change n=" + e.target.files.length);
     addFiles(e.target.files); e.target.value = "";
   });
 
