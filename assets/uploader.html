@@ -144,6 +144,13 @@ h1 { margin: 0 0 6px; font-size: 26px; }
 
 #emptyBrowse { color: #6f7a93; text-align: center; padding: 24px; font-size: 14px; }
 
+/* hidden file input that a <label for="..."> still drives reliably across browsers */
+.hiddenInp {
+  position: absolute; width: 1px; height: 1px;
+  opacity: 0; overflow: hidden; pointer-events: none;
+}
+label.btn { display: inline-block; line-height: 1; }
+
 .queue { margin-top: 16px; }
 .qrow {
   display: grid;
@@ -209,9 +216,9 @@ h1 { margin: 0 0 6px; font-size: 26px; }
   <div class="drop" id="drop">
     <p>Tap to choose photos or a folder, or drag and drop here</p>
     <input type="file" id="files" multiple accept="image/*">
-    <input type="file" id="folder" webkitdirectory directory style="display:none">
+    <input type="file" id="folder" webkitdirectory directory mozdirectory class="hiddenInp">
     <div class="actions">
-      <button class="btn ghost" id="pickFolder" type="button">Choose folder</button>
+      <label for="folder" class="btn ghost" id="pickFolder">Choose folder</label>
       <button class="btn ghost" id="clear" type="button" disabled>Clear</button>
       <button class="btn" id="send" type="button" disabled>Send to frame</button>
     </div>
@@ -476,9 +483,7 @@ h1 { margin: 0 0 6px; font-size: 26px; }
     }
   });
   inp.addEventListener("change", function () { addFiles(inp.files); inp.value = ""; });
-  document.getElementById("pickFolder").addEventListener("click", function () {
-    document.getElementById("folder").click();
-  });
+  // <label for="folder"> drives the picker natively, no JS click-trigger needed
   document.getElementById("folder").addEventListener("change", function (e) {
     addFiles(e.target.files); e.target.value = "";
   });
